@@ -206,7 +206,17 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   OpenSSL ENGINE headers). Default env: `findfdt` sets `omap4-panda.dtb`,
   console `ttyO2,115200n8`, distro boot (extlinux) on mmc0 first.
   SD card writer: `sudo scripts/write-sdcard.sh /dev/sdX`.
-  Still to do: boot on hardware, reach the U-Boot prompt, test `usb start; dhcp`.
+  Hardware findings (board is **OMAP4430-GP ES2.1**):
+  - The ROM does **not** boot `MLO` from our FAT partition (probably the old
+    CHS-geometry quirk). **Raw mode works**: `MLO` at sector 256, `u-boot.img`
+    at sector 768, which `write-sdcard.sh` now writes. U-Boot itself reads the
+    FAT partition fine, so kernel/extlinux/Alpine stay on p1.
+  - Debian 12's U-Boot 2023.01 reaches the prompt. In U-Boot, `usb start` finds
+    no LAN9514 hub/ethernet (bit-rot). Linux powers the hub itself from the DT,
+    but U-Boot won't set a stable MAC, so pin `hwaddress` in the Alpine network
+    config.
+  - `ti_sysc target-module@d5000` (MMC5, Wi-Fi SDIO) errors are harmless.
+  Still to do: test our own 2024.07 build in raw mode.
 
 ### Project layout
 

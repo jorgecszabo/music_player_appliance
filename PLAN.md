@@ -217,13 +217,27 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     config.
   - `ti_sysc target-module@d5000` (MMC5, Wi-Fi SDIO) errors are harmless.
   - Our own 2024.07 build boots to the prompt in raw mode, so we use it.
-- [~] **Phase 2** (2026-11-03): Linux 6.18.60 LTS cross-builds
+- [x] **Phase 2** (2026-11-03): Linux 6.18.60 LTS cross-builds
   (`scripts/config-kernel.sh` = omap2plus_defconfig + `aports/main/linux-pandaboard/pandaboard.config`,
   then `scripts/build-kernel.sh`). Notes: gzip kernel compression (Fedora has no `lzma` tool);
   USB gadget/MUSB disabled so NOP_USB_XCEIV/EHCI/SMSC95xx can be built in; zstd firmware
   loading enabled (Alpine compresses linux-firmware). Test image: `scripts/make-test-initramfs.sh`
   makes `build/testboot/` (Alpine userland + modules + `test/init`, shell on serial).
-  Still to do: boot on hardware; check audio, eth0, BT.
+  **Verified on hardware (2026-11-03):**
+  - Ethernet: Linux powers the LAN9514 hub; `eth0` gets DHCP. MAC
+    `02:03:00:a0:15:e0` is the same on every boot, so no pinning needed.
+  - Audio: TWL6040 card `PandaBoard` plus an `HDMI` card. **McPDM only runs at
+    88.2/96 kHz, S32_LE**, so set the PipeWire rate to 88200 (44.1 kHz sources ×2)
+    with 96000 allowed. Mixer: `Headset * Playback`=`HS DAC` and/or
+    `Handsfree * Playback`=`HF DAC` + `AUXL/AUXR` (line out). The ABE `DL1 PDM`
+    controls don't exist without ABE firmware.
+  - Bluetooth: onboard WL1271 comes up as `hci0` (TI, HCI/LMP 2.1,
+    TIInit_7.2.31 firmware loads, baud switch OK).
+  - CPU scales 300–1008 MHz. 8 GB SDHC runs in high-speed mode.
+  - Cleanup for the final kernel: OMAP remoteproc (DSP/IPU, 120 MB CMA, no
+    firmware) and the omap4-keypad probe error. TWL6030 "vsel out of range"
+    warnings are for the 1.2 GHz OPP the 4430 doesn't use, so they're harmless.
+- [ ] Phase 3: Alpine diskless image
 
 ### Project layout
 

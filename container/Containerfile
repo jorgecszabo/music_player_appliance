@@ -9,7 +9,8 @@ RUN apk add --no-cache \
         linux-headers mpc1-dev mpfr-dev ncurses-dev openssl-dev perl \
         python3 py3-setuptools py3-elftools swig gnutls-dev util-linux-dev \
         xz lz4 zstd squashfs-tools mtools dosfstools sudo \
-        tar git rsync
+        tar git rsync \
+        mkinitfs fakeroot pigz kmod cpio
 
 # Build user matching the host uid so bind-mounted files stay owned by us.
 ARG UID=1000

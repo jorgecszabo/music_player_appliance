@@ -11,6 +11,7 @@ user_flags=(--userns=keep-id)
 exec podman run --rm "${tty_flag[@]}" --platform linux/arm/v7 \
     "${user_flags[@]}" \
     -v "$PROJECT_DIR:/work:Z" \
-    -v "$PROJECT_DIR/keys:/home/builder/.abuild:Z" \
+    -v "$PROJECT_DIR/keys:/home/builder/.abuild:z" \
+    -v "$PROJECT_DIR/keys:/root/.abuild:z" \
     -e PACKAGER="${PACKAGER:-PandaBoard builder <builder@localhost>}" \
     "$IMAGE" "${@:-bash}"

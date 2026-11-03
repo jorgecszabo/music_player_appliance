@@ -1,0 +1,77 @@
+# Maintainer: Jorge Szabo <jorgecszabo@gmail.com>
+#
+# Linux LTS kernel for the PandaBoard (OMAP4430) audio appliance.
+# Config: omap2plus_defconfig + pandaboard.config (merged at build time).
+# Layout follows main/linux-lts so update-kernel / mkimage / the modloop
+# service work unchanged: release "<ver>-<pkgrel>-pandaboard",
+# /boot/{vmlinuz,System.map,config}-pandaboard, /boot/dtbs-pandaboard/.
+_flavor=pandaboard
+pkgname=linux-$_flavor
+pkgver=6.18.60
+_kernver=${pkgver%.*}
+pkgrel=0
+pkgdesc="Linux LTS kernel for the PandaBoard (OMAP4430)"
+url="https://www.kernel.org"
+arch="armv7"
+license="GPL-2.0-only"
+depends="initramfs-generator"
+makedepends="bash bc bison diffutils elfutils-dev findutils flex gmp-dev
+	linux-headers mpc1-dev mpfr-dev openssl-dev perl python3 xz zstd"
+options="!strip !check"
+source="https://cdn.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/linux-$_kernver.tar.xz
+	patch-$pkgver.patch.xz::https://cdn.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/patch-$pkgver.xz
+	pandaboard.config
+	"
+builddir="$srcdir/linux-$_kernver"
+_outdir="$srcdir/build"
+
+prepare() {
+	default_prepare
+	rm -f localversion*
+}
+
+build() {
+	unset LDFLAGS CFLAGS CPPFLAGS CXXFLAGS
+	export KBUILD_BUILD_TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S' -u${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+	mkdir -p "$_outdir"
+	echo "-$pkgrel-$_flavor" > "$_outdir"/localversion-alpine
+
+	make -C "$builddir" O="$_outdir" ARCH=arm omap2plus_defconfig
+	ARCH=arm "$builddir"/scripts/kconfig/merge_config.sh -O "$_outdir" -m \
+		"$_outdir"/.config "$srcdir"/pandaboard.config
+	# The release suffix comes from localversion-alpine, not the fragment.
+	"$builddir"/scripts/config --file "$_outdir"/.config --set-str LOCALVERSION ""
+	make -C "$builddir" O="$_outdir" ARCH=arm olddefconfig
+
+	make -C "$_outdir" ARCH=arm \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine" \
+		zImage modules dtbs
+}
+
+package() {
+	cd "$_outdir"
+	local _rel="$(make -s kernelrelease)"
+	case "$_rel" in
+	*-"$pkgrel-$_flavor") ;;
+	*) die "unexpected kernel release $_rel" ;;
+	esac
+
+	install -Dm644 arch/arm/boot/zImage "$pkgdir"/boot/vmlinuz-$_flavor
+	install -Dm644 System.map "$pkgdir"/boot/System.map-$_flavor
+	install -Dm644 .config "$pkgdir"/boot/config-$_flavor
+
+	# Only the Panda variants, flat, so FDT /boot/dtbs-pandaboard/<name>.dtb works.
+	local _dtb
+	for _dtb in arch/arm/boot/dts/ti/omap/omap4-panda*.dtb; do
+		install -Dm644 "$_dtb" "$pkgdir"/boot/dtbs-$_flavor/"${_dtb##*/}"
+	done
+
+	make ARCH=arm modules_install \
+		INSTALL_MOD_PATH="$pkgdir" INSTALL_MOD_STRIP=1
+	rm -f "$pkgdir"/lib/modules/"$_rel"/build "$pkgdir"/lib/modules/"$_rel"/source
+	rm -rf "$pkgdir"/lib/firmware
+
+	install -Dm644 include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+

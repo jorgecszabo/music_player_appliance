@@ -201,7 +201,12 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   run with `scripts/alpine.sh`); abuild signing key in `keys/`
   (the private key is gitignored, so back it up); host cross gcc 16.2 checked.
   Still to do: re-login for `dialout`, and connect the serial adapter.
-- [ ] Phase 1: U-Boot v2024.07
+- [~] **Phase 1** (2026-11-03): U-Boot v2024.07 builds with the host cross gcc
+  (`scripts/build-uboot.sh`; `TOOLS_LIBCRYPTO` disabled because Fedora lacks the
+  OpenSSL ENGINE headers). Default env: `findfdt` sets `omap4-panda.dtb`,
+  console `ttyO2,115200n8`, distro boot (extlinux) on mmc0 first.
+  SD card writer: `sudo scripts/write-sdcard.sh /dev/sdX`.
+  Still to do: boot on hardware, reach the U-Boot prompt, test `usb start; dhcp`.
 
 ### Project layout
 
@@ -210,6 +215,8 @@ container/Containerfile   armv7 Alpine build env (abuild, mkimage deps)
 scripts/env.sh            shared settings (Alpine version, CROSS_COMPILE)
 scripts/alpine.sh         run a command/shell in the container (/work = repo)
 scripts/setup-keys.sh     one-time abuild key generation
+scripts/build-uboot.sh    build MLO + u-boot.img into build/u-boot-out/
+scripts/write-sdcard.sh   partition/format SD (FAT32 boot) and install files
 aports/main/              our APKBUILDs (linux-pandaboard, u-boot-pandaboard, ...)
 build/                    sources and outputs (gitignored)
 keys/                     abuild keys (private key gitignored)

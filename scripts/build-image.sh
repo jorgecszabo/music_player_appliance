@@ -17,6 +17,7 @@ mkdir -p "$PROJECT_DIR/build/image" "$PROJECT_DIR/build/mkimage-work"
 
 ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     cp /root/.abuild/*.rsa.pub /etc/apk/keys/
+    apk update -q
     mkdir -p /root/.mkimage && cp /work/image/* /root/.mkimage/
     . /root/.abuild/abuild.conf; export PACKAGER_PRIVKEY
     cd /work/build/src/aports/scripts

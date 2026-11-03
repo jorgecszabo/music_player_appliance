@@ -11,6 +11,7 @@ PKG="${1:?usage: $0 <aport name>}"
 mkdir -p "$PROJECT_DIR/packages" "$PROJECT_DIR/build/distfiles"
 ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     cp /root/.abuild/*.rsa.pub /etc/apk/keys/
+    apk update -q
     cd /work/aports/main/$PKG
     export SRCDEST=/work/build/distfiles REPODEST=/work/packages
     grep -q '^sha512sums=\"\"' APKBUILD && abuild -F checksum

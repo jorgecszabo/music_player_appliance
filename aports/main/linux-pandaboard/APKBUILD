@@ -15,7 +15,7 @@ url="https://www.kernel.org"
 arch="armv7"
 license="GPL-2.0-only"
 depends="initramfs-generator"
-makedepends="bash bc bison diffutils elfutils-dev findutils flex gmp-dev
+makedepends="bash bc bison coreutils diffutils elfutils-dev findutils flex gmp-dev
 	linux-headers mpc1-dev mpfr-dev openssl-dev perl python3 xz zstd"
 options="!strip !check"
 source="https://cdn.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/linux-$_kernver.tar.xz
@@ -75,3 +75,8 @@ package() {
 		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
 }
 
+sha512sums="
+88599ffdec96d150c1feb9b261ba93bb0301a9d0e1ad6bef7aeab1f5372cbfc57d8b43c7e902bd8f76921d1dbd8189663c142ea869e51d0e2b483b150ee00fe0  linux-6.18.tar.xz
+fce959c563635d4374cba148b7f1b8b64a143e5b42bd8e86afee7dfdc76b9d887afb5a032249ac16518ee95e73b3c1a459f15926a035780493c5b3b9fbd3b51b  patch-6.18.60.patch.xz
+f1ff4f6b1b57c2f811a74ff7420e89280eaf726ea7ddebaee517af62d2ad175b539bccc6c311c10256eaad8c6174848cf4fbac7639d034e760e9d2039b445586  pandaboard.config
+"

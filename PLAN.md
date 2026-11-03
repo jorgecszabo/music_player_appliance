@@ -238,7 +238,18 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - Cleanup for the final kernel: OMAP remoteproc (DSP/IPU, 120 MB CMA, no
     firmware) and the omap4-keypad probe error. TWL6030 "vsel out of range"
     warnings are for the 1.2 GHz OPP the 4430 doesn't use, so they're harmless.
-- [ ] Phase 3: Alpine diskless image
+- [~] **Phase 3** (2026-11-03): Alpine diskless image.
+  - `aports/main/linux-pandaboard` (release `6.18.60-0-pandaboard`), built natively in
+    the armv7 container by `scripts/build-package.sh linux-pandaboard` (output in
+    `packages/main/armv7/`). Runs as container root with `abuild -F`, because
+    setuid/sudo don't work under qemu-user. Needs `coreutils` (merge_config.sh
+    uses `readlink -m`).
+  - `image/mkimg.pandaboard.sh` profile + `image/genapkovl-pandaboard.sh` (hostname
+    `panda`, eth0 DHCP, chronyd, `LBU_MEDIA=mmcblk0p1`), built by
+    `scripts/build-image.sh` into `build/sdimage/`. Serial getty comes from
+    `console=ttyS2` (initramfs adds it). The modloop gets TIInit explicitly
+    (`modloopfw`).
+  - Still to do: boot, setup-alpine/lbu, power-yank test.
 
 ### Project layout
 
@@ -253,6 +264,10 @@ scripts/swap-uboot.sh     replace U-Boot files on a written card (FAT copies onl
 scripts/config-kernel.sh  kernel .config from omap2plus + our fragment
 scripts/build-kernel.sh   cross-build zImage, DTB, modules
 scripts/make-test-initramfs.sh  Phase 2 test boot files into build/testboot/
+scripts/update-boot-files.sh    copy a staging dir to the card's FAT partition (udisks, no sudo)
+scripts/build-package.sh  abuild one of our aports in the container
+scripts/build-image.sh    mkimage "pandaboard" profile into build/sdimage/
+image/                    mkimage profile + apkovl generator
 test/                     test init + audio test script
 aports/main/              our APKBUILDs (linux-pandaboard, u-boot-pandaboard, ...)
 build/                    sources and outputs (gitignored)

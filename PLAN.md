@@ -127,8 +127,13 @@ arbitration, Bluetooth integration and the network sink.
   is packaged in Alpine community/testing, or package librespot ourselves (Rust;
   build in the armv7 container).
 - **AirPlay:** `shairport-sync` (Alpine community) with `avahi`, PulseAudio/
-  PipeWire backend. AirPlay 1 is cheap on the A9; AirPlay 2 needs `nqptp` and
-  more CPU, so test it.
+  PipeWire backend. The user has Android, so AirPlay is for the Fedora desktop
+  (PipeWire RAOP sink) and for guests' iPhones. One shairport-sync 5.1+ instance
+  offers **either** classic AirPlay **or** AirPlay 2 (`auto` = AirPlay 2 when
+  `nqptp` runs). Default: **classic** (works with PipeWire RAOP and iOS, cheap on
+  the A9). AirPlay 2 only adds multiroom/Home-app features. If wanted, run a
+  second AirPlay 2 instance under another name, and check whether PipeWire RAOP
+  can use it (not verified).
   - Bonus: Fedora desktops can stream to the Panda over AirPlay through
     PipeWire's RAOP sink (`libpipewire-module-raop-discover`), with no extra
     setup on the Panda.

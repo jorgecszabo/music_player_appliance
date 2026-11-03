@@ -1,6 +1,6 @@
 #!/bin/sh
-# Phase 2 hardware test init: no Alpine boot logic, just bring up hardware
-# and drop to a shell on the serial console.
+# Phase 2 hardware test: run once by busybox init (sysinit), before
+# the serial shell starts. No Alpine boot logic.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -30,4 +30,3 @@ echo
 echo "Tests: udhcpc -i eth0 | aplay -l | speaker-test -c2 -t wav | hciconfig -a"
 echo "       /test-audio.sh (sets TWL6040 headset mixer route)"
 echo
-exec setsid cttyhack /bin/sh -l

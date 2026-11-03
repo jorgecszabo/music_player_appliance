@@ -19,7 +19,8 @@ ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     mkdir -p \$R/lib/modules
     cp -a /work/build/linux-modules/lib/modules/$KREL \$R/lib/modules/
     depmod -b \$R $KREL
-    install -m755 /work/test/init \$R/init
+    install -m755 /work/test/hwtest.sh \$R/hwtest.sh
+    install -m644 /work/test/inittab \$R/etc/inittab
     install -m755 /work/test/test-audio.sh \$R/test-audio.sh
     rm -rf \$R/var/cache/apk/* \$R/lib/apk/db
     du -sh \$R
@@ -34,6 +35,6 @@ label test
     kernel /boot/zImage
     fdt /boot/omap4-panda.dtb
     initrd /boot/initramfs-test.gz
-    append earlycon console=ttyS2,115200n8 rdinit=/init loglevel=7
+    append earlycon console=ttyS2,115200n8 rdinit=/sbin/init loglevel=7
 EXT
 ls -lR "$STAGE"

@@ -7,11 +7,16 @@
 #                after MLO/u-boot.img (optional, e.g. the Alpine image).
 #
 # Layout: MBR, p1 = FAT32 (LBA, type 0x0c), boot flag, 512 MiB starting at 1 MiB.
+# The boot files go in twice, so either OMAP4 ROM boot method works:
+#   raw:  MLO at sector 256 (128 KiB), u-boot.img at sector 768 (384 KiB)
+#   FAT:  MLO (copied first) and u-boot.img on p1
+# UBOOT_DIR=<dir> selects another MLO/u-boot.img (default build/u-boot-out).
+# A report is written to build/sdcard-report.txt.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 DEV="${1:?usage: $0 /dev/sdX [staging-dir]}"
 STAGE="${2:-}"
-UBOOT_OUT="$PROJECT_DIR/build/u-boot-out"
+UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out}")"
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)"; exit 1; }
 [ -b "$DEV" ] || { echo "$DEV is not a block device"; exit 1; }
@@ -57,5 +62,35 @@ cp "$UBOOT_OUT/MLO" "$MNT/MLO"; sync
 cp "$UBOOT_OUT/u-boot.img" "$MNT/u-boot.img"
 if [ -n "$STAGE" ]; then cp -r "$STAGE"/. "$MNT"/; fi
 sync
-ls -la "$MNT"
-echo "done: $PART"
+umount "$MNT"
+
+# Raw-mode copies in the gap before p1 (sector 2048). u-boot.img must end
+# before the partition: (2048 - 768) * 512 = 640 KiB available.
+[ "$(stat -c %s "$UBOOT_OUT/u-boot.img")" -le $(( (2048 - 768) * 512 )) ] \
+    || { echo "u-boot.img too large for raw slot"; exit 1; }
+dd if="$UBOOT_OUT/MLO" of="$DEV" bs=512 seek=256 conv=fsync,notrunc status=none
+dd if="$UBOOT_OUT/u-boot.img" of="$DEV" bs=512 seek=768 conv=fsync,notrunc status=none
+sync
+
+# Report: read everything back and compare.
+REPORT="$PROJECT_DIR/build/sdcard-report.txt"
+{
+    echo "# $(date -Is) $DEV  UBOOT_DIR=$UBOOT_OUT"
+    sfdisk -d "$DEV"
+    blkid "$PART"
+    fsck.fat -n -v "$PART" 2>&1 | head -20 || true
+    mount -o ro "$PART" "$MNT"
+    ls -la --time-style=+ "$MNT"
+    for f in MLO u-boot.img; do
+        cmp "$UBOOT_OUT/$f" "$MNT/$f" && echo "FAT $f: matches"
+    done
+    umount "$MNT"
+    cmp -n "$(stat -c %s "$UBOOT_OUT/MLO")" "$UBOOT_OUT/MLO" <(dd if="$DEV" bs=512 skip=256 status=none) \
+        && echo "raw MLO @256: matches"
+    cmp -n "$(stat -c %s "$UBOOT_OUT/u-boot.img")" "$UBOOT_OUT/u-boot.img" <(dd if="$DEV" bs=512 skip=768 status=none) \
+        && echo "raw u-boot.img @768: matches"
+    strings "$UBOOT_OUT/MLO" | grep -m1 "U-Boot SPL"
+} > "$REPORT" 2>&1
+[ -n "${SUDO_UID:-}" ] && chown "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$REPORT"
+cat "$REPORT"
+echo "done: $DEV"

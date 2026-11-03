@@ -201,7 +201,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   run with `scripts/alpine.sh`); abuild signing key in `keys/`
   (the private key is gitignored, so back it up); host cross gcc 16.2 checked.
   Still to do: re-login for `dialout`, and connect the serial adapter.
-- [~] **Phase 1** (2026-11-03): U-Boot v2024.07 builds with the host cross gcc
+- [x] **Phase 1** (2026-11-03): U-Boot v2024.07 builds with the host cross gcc
   (`scripts/build-uboot.sh`; `TOOLS_LIBCRYPTO` disabled because Fedora lacks the
   OpenSSL ENGINE headers). Default env: `findfdt` sets `omap4-panda.dtb`,
   console `ttyO2,115200n8`, distro boot (extlinux) on mmc0 first.
@@ -216,7 +216,8 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     but U-Boot won't set a stable MAC, so pin `hwaddress` in the Alpine network
     config.
   - `ti_sysc target-module@d5000` (MMC5, Wi-Fi SDIO) errors are harmless.
-  Still to do: test our own 2024.07 build in raw mode.
+  - Our own 2024.07 build boots to the prompt in raw mode, so we use it.
+- [ ] Phase 2: kernel
 
 ### Project layout
 

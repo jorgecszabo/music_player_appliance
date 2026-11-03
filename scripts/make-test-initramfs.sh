@@ -34,6 +34,6 @@ label test
     kernel /boot/zImage
     fdt /boot/omap4-panda.dtb
     initrd /boot/initramfs-test.gz
-    append console=ttyS2,115200n8 rdinit=/init loglevel=7
+    append earlycon console=ttyS2,115200n8 rdinit=/init loglevel=7
 EXT
 ls -lR "$STAGE"

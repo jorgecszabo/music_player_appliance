@@ -11,6 +11,7 @@ mount -t tmpfs tmpfs /run
 mount -t tmpfs tmpfs /tmp
 hostname panda-test
 ip link set lo up
+ip link set eth0 up 2>/dev/null
 
 # Load modules for every device present (twice for devices behind buses
 # whose drivers are themselves modules).
@@ -27,6 +28,6 @@ echo "--- network";      ip -br link
 echo "--- bluetooth";    ls /sys/class/bluetooth 2>/dev/null
 echo "--- cpufreq";      cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies 2>/dev/null
 echo
-echo "Tests: udhcpc -i eth0 | aplay -l | speaker-test -c2 -t wav | hciconfig -a"
+echo "Tests: ip link set eth0 up; udhcpc -i eth0 | aplay -l | speaker-test -c2 -t wav | hciconfig -a"
 echo "       /test-audio.sh (sets TWL6040 headset mixer route)"
 echo

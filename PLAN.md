@@ -227,8 +227,12 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - Ethernet: Linux powers the LAN9514 hub; `eth0` gets DHCP. MAC
     `02:03:00:a0:15:e0` is the same on every boot, so no pinning needed.
   - Audio: TWL6040 card `PandaBoard` plus an `HDMI` card. **McPDM only runs at
-    88.2/96 kHz, S32_LE**, so set the PipeWire rate to 88200 (44.1 kHz sources ×2)
-    with 96000 allowed. **The audio-out jack is on the headset path**: set
+    88.2/96 kHz, S32_LE** (no ABE DSP in mainline, so nothing converts rates in
+    hardware). The codec PLL narrows this further: `PLL Selection`=`High-Performance`
+    (HPPLL, from the 38.4 MHz mclk) allows **96 kHz only**; `Low-Power` (LPPLL, from
+    the 32 kHz clock) allows 88.2 and 96 kHz. Plan: fixed 96 kHz on HPPLL, with
+    PipeWire resampling everything (44.1 kHz sources → 96 kHz). 88.2 kHz would need
+    LPPLL, which is worth an A/B listening test but is likely the jitterier clock. **The audio-out jack is on the headset path**: set
     `Headset Left/Right Playback`=`HS DAC` and `Headset` volume (0–15). Leave
     the line-out path off (it stays silent with `AUXL/AUXR` off). The ABE
     `DL1 PDM` controls don't exist without ABE firmware.

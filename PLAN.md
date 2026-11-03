@@ -217,7 +217,13 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     config.
   - `ti_sysc target-module@d5000` (MMC5, Wi-Fi SDIO) errors are harmless.
   - Our own 2024.07 build boots to the prompt in raw mode, so we use it.
-- [ ] Phase 2: kernel
+- [~] **Phase 2** (2026-11-03): Linux 6.18.60 LTS cross-builds
+  (`scripts/config-kernel.sh` = omap2plus_defconfig + `aports/main/linux-pandaboard/pandaboard.config`,
+  then `scripts/build-kernel.sh`). Notes: gzip kernel compression (Fedora has no `lzma` tool);
+  USB gadget/MUSB disabled so NOP_USB_XCEIV/EHCI/SMSC95xx can be built in; zstd firmware
+  loading enabled (Alpine compresses linux-firmware). Test image: `scripts/make-test-initramfs.sh`
+  makes `build/testboot/` (Alpine userland + modules + `test/init`, shell on serial).
+  Still to do: boot on hardware; check audio, eth0, BT.
 
 ### Project layout
 
@@ -228,6 +234,11 @@ scripts/alpine.sh         run a command/shell in the container (/work = repo)
 scripts/setup-keys.sh     one-time abuild key generation
 scripts/build-uboot.sh    build MLO + u-boot.img into build/u-boot-out/
 scripts/write-sdcard.sh   partition/format SD (FAT32 boot) and install files
+scripts/swap-uboot.sh     replace U-Boot files on a written card (FAT copies only)
+scripts/config-kernel.sh  kernel .config from omap2plus + our fragment
+scripts/build-kernel.sh   cross-build zImage, DTB, modules
+scripts/make-test-initramfs.sh  Phase 2 test boot files into build/testboot/
+test/                     test init + audio test script
 aports/main/              our APKBUILDs (linux-pandaboard, u-boot-pandaboard, ...)
 build/                    sources and outputs (gitignored)
 keys/                     abuild keys (private key gitignored)

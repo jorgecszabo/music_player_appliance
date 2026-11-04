@@ -42,11 +42,14 @@ if [ -n "$missing" ]; then
 fi
 
 # --- Our own packages (aports/, pushed by deploy.sh): install if newer/different ----
+# Only packages that are installed already (upgrades): deploy.sh pushes every
+# subpackage we build (pipewire-jack, gst-plugin-pipewire, ...).
 if ls /tmp/panda-deploy/apks/*.apk >/dev/null 2>&1; then
 	new=""
 	for f in /tmp/panda-deploy/apks/*.apk; do
 		v=$(basename "$f" .apk)
-		[ "$(apk info -e -v "${v%-*-*}" 2>/dev/null)" = "$v" ] || new="$new $f"
+		cur=$(apk info -e -v "${v%-*-*}" 2>/dev/null) || continue
+		[ "$cur" = "$v" ] || new="$new $f"
 	done
 	if [ -n "$new" ]; then
 		log "installing our packages:$new"
@@ -56,6 +59,23 @@ if ls /tmp/panda-deploy/apks/*.apk >/dev/null 2>&1; then
 		mount -o remount,ro /media/"$BOOT_MEDIA"
 		[ "$rc" -eq 0 ] || { log "ERROR: installing our packages failed"; exit 1; }
 	fi
+fi
+
+# --- Keep the GPU stack out --------------------------------------------------------
+# Alpine's pipewire (via libcamera) and mpv pull in mesa + llvm (~170 MB of RAM
+# here); our builds (aports/pipewire, aports/mpv) don't. Conflicts in the world
+# make apk keep ours rather than take a newer Alpine version that needs them.
+add=""
+for c in '!mesa' '!libcamera'; do
+	grep -qx -- "$c" /etc/apk/world || add="$add $c"
+done
+if [ -n "$add" ]; then
+	log "keeping out:$add"
+	mount -o remount,rw /media/"$BOOT_MEDIA"
+	if apk add $add && apk cache sync; then rc=0; else rc=$?; fi
+	sync
+	mount -o remount,ro /media/"$BOOT_MEDIA"
+	[ "$rc" -eq 0 ] || { log "ERROR: apk add$add failed (still installed: see apk info -r mesa)"; exit 1; }
 fi
 
 # --- Device manager: eudev instead of mdev -----------------------------------------

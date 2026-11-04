@@ -9,6 +9,10 @@
 pkgname=shairport-sync
 pkgver=5.5.1
 pkgrel=100
+# Alpine package this fork is based on (scripts/check-forks.sh compares it
+# with Alpine's current one): repository/name and version-release.
+_upstream=community/shairport-sync
+_upstream_base=5.5.1-r0
 pkgdesc="AirTunes emulator. Shairport Sync adds multi-room capability with Audio Synchronisation"
 url="https://github.com/mikebrady/shairport-sync"
 arch="all"

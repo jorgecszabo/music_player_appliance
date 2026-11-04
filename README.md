@@ -2,8 +2,10 @@
 
 Alpine Linux in diskless mode as a network/Bluetooth speaker. The root filesystem
 lives in RAM and the boot media stays read-only, so the power can be cut at any
-time. The first board is a PandaBoard rev A1 (OMAP4430). Board-specific parts
-live in `boards/<board>/`, and everything else is board-independent.
+time. The first board is a PandaBoard rev A1 (OMAP4430); a BeagleBoard-xM
+(DM3730) port (`BOARD=beaglexm`) builds but is untested on hardware.
+Board-specific parts live in `boards/<board>/`, and everything else is
+board-independent.
 
 See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 
@@ -14,8 +16,8 @@ scripts/build-container.sh                       # target-arch Alpine build cont
 scripts/setup-keys.sh                            # abuild signing key (once; back up keys/*.rsa)
 scripts/build-u-boot.sh                          # U-Boot v2024.07 (needs gcc-arm-linux-gnu)
 scripts/build-package.sh linux-pandaboard        # kernel, cross-compiled (~10 min)
-scripts/build-image.sh                           # diskless image into build/sdimage/
-sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage   # erases the card
+scripts/build-image.sh                           # diskless image into build/sdimage/pandaboard/
+sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage/pandaboard   # erases the card
 ```
 
 Then boot with the serial console (115200 8N1), set a root password for the
@@ -30,10 +32,31 @@ or drop one onto the card's boot partition (imported at boot, then deleted):
 
 Otherwise boot with Ethernet and pick a network on the web page (Network).
 
-Other boards: `BOARD=<name>` selects `boards/<name>/`. That directory needs a
+Other boards: `BOARD=<name>` selects `boards/<name>/` (default `pandaboard`), e.g.
+
+```sh
+BOARD=beaglexm scripts/build-u-boot.sh
+BOARD=beaglexm scripts/build-package.sh linux-beaglexm
+BOARD=beaglexm scripts/build-image.sh
+sudo boards/beaglexm/write-sdcard.sh /dev/sdX build/sdimage/beaglexm
+```
+
+A board directory needs a
 `board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile
 and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
 `scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
+
+## Our forks of Alpine packages
+
+`aports/` holds forks of Alpine packages: shairport-sync (native PipeWire
+backend), and pipewire and mpv without the GPU stack (Alpine's builds pull in
+mesa and llvm, ~170 MB of RAM on a diskless board). They win over Alpine's
+builds (pkgrel 100) and setup.sh keeps `!mesa` and `!libcamera` in the world,
+so upstream fixes only arrive when we rebuild. `scripts/check-forks.sh` lists
+the forks and board kernels that are behind Alpine or kernel.org (exit 1).
+To update a fork: take Alpine's new APKBUILD, reapply the changes listed in
+the fork's header, set `_upstream_base`, keep `pkgrel=100`, and rebuild with
+`scripts/build-package.sh <name>`.
 
 ## Debugging
 

@@ -37,6 +37,9 @@ ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     grep -q '^sha512sums=\"\"' APKBUILD && abuild -F checksum
     abuild -F -r
 "
-# Keep checksums that abuild filled in.
-cmp -s "$WORK/APKBUILD" "$APORT/APKBUILD" || cp "$WORK/APKBUILD" "$APORT/APKBUILD"
+# Keep checksums that abuild filled in (only then: copying back otherwise
+# would undo edits made to the aport while it was building).
+if grep -q '^sha512sums=""' "$APORT/APKBUILD" && ! grep -q '^sha512sums=""' "$WORK/APKBUILD"; then
+    cp "$WORK/APKBUILD" "$APORT/APKBUILD"
+fi
 ls -l "$PROJECT_DIR/packages/main/$ALPINE_ARCH/"

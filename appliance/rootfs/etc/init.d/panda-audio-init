@@ -13,6 +13,8 @@ depend() {
 
 start() {
 	. /etc/panda/board.conf
+	# No onboard output (USB audio only; audio-route.py sets up USB cards).
+	[ -n "${AUDIO_CARD:-}" ] || return 0
 	ebegin "Setting up audio mixer for $AUDIO_CARD"
 	# The sound card registers asynchronously (deferred probe); wait for it.
 	local i=0

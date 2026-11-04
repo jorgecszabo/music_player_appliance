@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Last source wins + now-playing info. Runs as user speaker (speaker-arbiter).
+"""Last source wins, output routing, now-playing info. Runs as user speaker (speaker-arbiter).
 
 Watches PipeWire's playback streams (pw-dump --monitor, event driven). When a
 source starts playing while another one plays, the older one is stopped:
@@ -9,6 +9,11 @@ source starts playing while another one plays, the older one is stopped:
 Anything still playing 2 s after a pause request is muted too. A stream this
 service muted is unmuted when it's the only one playing again, or when it
 starts playing anew (then it wins).
+
+Output routing: when an audio output (e.g. a USB card) or the tone filter
+appears or goes away, /etc/panda/audio-route.py applies the output choice
+(audio.conf OUTPUT) and the USB card's volume cap; when the tone filter
+starts, also the saved master volume.
 
 Now playing: Spotify (soloist ctl now --json, while its stream plays) and
 AirPlay (shairport-sync's metadata pipe) are written to
@@ -32,6 +37,8 @@ META_PIPE = "/run/speaker/shairport-metadata"
 NOWPLAYING = "/run/speaker/nowplaying.json"
 IGNORE = {"chime", "panda-eq.output"}
 PAUSE_GRACE_S = 2.0
+ROUTE = ["/usr/bin/python3", "/etc/panda/audio-route.py"]
+ROUTE_SETTLE_S = 1.5    # let WirePlumber finish setting up a new card first
 
 
 def log(*a):
@@ -125,6 +132,9 @@ class Arbiter:
         self.streams = {}      # id -> {"source", "state", "since", "props"}
         self.muted_by_us = set()
         self.lock = threading.Lock()
+        self.outputs = set()   # ids of alsa_output sinks and the tone filter's output
+        self.route_timer = None
+        self.route_master = False   # next run also restores the master volume
 
     # --- PipeWire ------------------------------------------------------------------
     def monitor(self):
@@ -168,9 +178,20 @@ class Arbiter:
                 self.muted_by_us.discard(oid)
             if st:
                 self.stream_gone(st)
+            if oid in self.outputs:
+                self.outputs.discard(oid)
+                self.schedule_route()
             return
         # Updates are partial (only the changed fields, often without "type").
         props = info.get("props") or {}
+        if oid not in self.outputs and o.get("type") == "PipeWire:Interface:Node" and (
+                props.get("node.name") == "panda-eq.output"
+                or (props.get("media.class") == "Audio/Sink"
+                    and props.get("node.name", "").startswith("alsa_output."))):
+            self.outputs.add(oid)
+            # The tone filter (re)started (boot, audio restart): its volume is
+            # back at 100%, so restore the saved master volume.
+            self.schedule_route(master=props.get("node.name") == "panda-eq.output")
         with self.lock:
             known = self.streams.get(oid)
         if known is None:
@@ -193,6 +214,28 @@ class Arbiter:
                 threading.Thread(target=self.started, args=(oid,), daemon=True).start()
             elif prev == "running" and state != "running":
                 threading.Thread(target=self.stopped, args=(oid,), daemon=True).start()
+
+    # --- output routing --------------------------------------------------------------
+    def schedule_route(self, master=False):
+        """Run audio-route.py once things settle (a card brings several events)."""
+        with self.lock:
+            self.route_master = self.route_master or master
+            if self.route_timer:
+                self.route_timer.cancel()
+            self.route_timer = threading.Timer(ROUTE_SETTLE_S, self.route)
+            self.route_timer.daemon = True
+            self.route_timer.start()
+
+    def route(self):
+        with self.lock:
+            master, self.route_master = self.route_master, False
+        try:
+            r = subprocess.run(ROUTE + (["--master"] if master else []),
+                               capture_output=True, text=True, timeout=60)
+            for line in (r.stdout + r.stderr).strip().splitlines():
+                log("route:", line)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            log("audio-route:", e)
 
     # --- policy --------------------------------------------------------------------
     def running(self):

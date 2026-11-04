@@ -298,6 +298,8 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
 }
 .tone-val { font: 11px var(--mono); text-align: right; }
+.output-list { display: flex; flex-direction: column; gap: 4px; }
+.usb-mode { display: inline-flex; align-items: center; gap: 6px; margin-left: 22px; font-size: 12px; }
 
 /* --- Tables -------------------------------------------------------------------- */
 table.grid {

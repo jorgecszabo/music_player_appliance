@@ -16,7 +16,7 @@ Audio sources (all mixed by PipeWire on the board):
   for Linux hosts
 - **Bluetooth A2DP sink**: phones pair and play to the Panda like a BT speaker
 
-Output: the onboard TWL6040 3.5 mm jack. Optional later: a USB DAC or HDMI audio.
+Output: the onboard TWL6040 3.5 mm jack, or a USB audio card (chosen on the web page). Optional later: HDMI audio.
 Network: wired Ethernet, and Wi-Fi (onboard WL1271 or any common USB adapter; see "Wi-Fi" below).
 
 ## Findings that shape the plan (verified 2026-11-03)
@@ -576,6 +576,22 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   often miss channel 6 entirely. Suspected: Bluetooth coexistence on the shared antenna (the
   phone was connected), or weak TX from the uncalibrated default NVS. Not the password, not
   congestion (9 weak neighbors, -71 to -82 dBm).
+- [x] **USB audio output** (2026-11-04, tested on the BeagleBoard-xM with Edifier R19U USB
+  speakers, 44.1 kHz only): WirePlumber allows the board's card plus any `device.bus = usb`
+  card (no USB capture; the onboard codec quirks only on the onboard node). Web page "Output
+  device": built-in jack or USB (`audio.conf OUTPUT`). `audio-route.py` (run by the arbiter on
+  output hotplug and by web-admin on a change, always as user speaker: PipeWire drops root's
+  metadata writes) sets `target.object` metadata on `panda-eq.output`, puts the USB card's
+  hardware controls at full level and applies its software cap (`USB_MAX_DB`). Full level =
+  0 dB only if the card's dB range is believable (below 0 to 0 or above), else 100%: the R19U
+  claims 0..+3.9 dB over raw 0..999, and its "0 dB" (raw 0) was silent. Output mode = the
+  card's ACP profile (`USB_PROFILE`: auto, analog, IEC958, pro-audio), picked on the web page
+  for quirky cards; all three play on the R19U. Unplugged: WirePlumber falls back to the
+  onboard target and moves back on replug (tested with a sysfs unbind/bind). Radio through
+  it: 0 xruns, ~33% CPU on the xM. Not tested: the Panda.
+  Master volume (web slider) remembered: `audio.conf MASTER_VOLUME`, written 2 s after the
+  slider rests and saved with lbu; restored when the tone filter starts (arbiter ->
+  `audio-route.py --master`), not on hotplug.
 
 ### Still to do
 

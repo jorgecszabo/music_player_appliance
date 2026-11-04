@@ -224,30 +224,93 @@ async function radioFavorites(show) {
 
 function capDb(t, step) { return (step - t.cap_max) * t.cap_step_db; }
 
+// Output choice and both caps as the page has them: the server's values, except
+// while the user is changing them. The "Max volume" slider edits the cap of the
+// selected output (onboard: hardware gain steps; USB: dB, software).
+let toneSel = null;
+
 function renderTone(s) {
   const t = s.tone;
   if (!t) return;
-  $("tone-cap").max = t.cap_max;
-  document.querySelectorAll(".cap-row").forEach((e) => { e.hidden = !t.available; });
-  for (const [id, v] of [["tone-bass", t.bass], ["tone-treble", t.treble], ["tone-cap", t.cap]]) {
+  if (!toneSel || !(toneTimer || dragging.has("tone-cap") || dragging.has("output") || dragging.has("out-mode"))) {
+    toneSel = { output: t.output, cap: t.cap, usb_cap: t.usb_cap, usb_profile: t.usb_profile };
+  }
+  for (const [id, v] of [["tone-bass", t.bass], ["tone-treble", t.treble]]) {
     if (dragging.has(id) || toneTimer) continue;
     $(id).value = v;
   }
+  const radio = $(`out-${toneSel.output}`);
+  if (radio) radio.checked = true;
+  setupCap(t);
+  renderOutputs(s, t);
   showTone(t);
+}
+
+function setupCap(t) {
+  const usb = toneSel.output === "usb";
+  const cap = $("tone-cap");
+  cap.min = usb ? t.usb_cap_min : 0;
+  cap.max = usb ? 0 : t.cap_max;
+  if (!dragging.has("tone-cap")) cap.value = usb ? toneSel.usb_cap : toneSel.cap;
+  setText("tone-cap-label", usb ? "Max volume (USB)" : "Max volume");
+  document.querySelectorAll(".cap-row").forEach((e) => { e.hidden = !usb && !t.available; });
+}
+
+function renderOutputs(s, t) {
+  const a = s.audio || {};
+  const outs = a.outputs || [];
+  const usb = outs.find((o) => o.usb);
+  $("out-onboard-line").hidden = !t.onboard;
+  setText("out-usb-name", usb ? `USB: ${usb.description || usb.name}` : "USB audio (none plugged in)");
+  renderUsbModes(a.usb_card);
+  const cur = outs.find((o) => o.name === a.output);
+  let msg = cur ? `Playing through: ${cur.description || cur.name}.` : "No audio output found.";
+  if (toneSel.output === "usb" && !usb && t.onboard) {
+    msg += " No USB audio card is plugged in: the built-in jack plays until one is.";
+  }
+  setText("out-status", msg);
+}
+
+// The USB card's output modes (ACP profiles), "Automatic" first.
+function renderUsbModes(card) {
+  $("out-mode-line").hidden = !card;
+  if (!card) return;
+  const sel = $("out-mode");
+  const opts = [["auto", "Automatic"]].concat(card.profiles.map((p) =>
+    [p.name, p.description + (p.available === "no" ? " (unavailable)" : "")]));
+  const key = JSON.stringify(opts);
+  if (sel.dataset.key !== key) {
+    sel.textContent = "";
+    for (const [v, label] of opts) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = label;
+      sel.appendChild(o);
+    }
+    sel.dataset.key = key;
+  }
+  if (!dragging.has("out-mode")) {
+    // A saved mode this card doesn't have: shown as Automatic (it's left alone).
+    sel.value = opts.some(([v]) => v === toneSel.usb_profile) ? toneSel.usb_profile : "auto";
+  }
+  const cur = card.profiles.find((p) => p.name === card.profile);
+  sel.title = cur ? `Now: ${cur.description}` : "";
 }
 
 function showTone(t) {
   const sign = (v) => (v > 0 ? "+" : "") + v;
   setText("tone-bass-val", `${sign(+$("tone-bass").value)} dB`);
   setText("tone-treble-val", `${sign(+$("tone-treble").value)} dB`);
-  setText("tone-cap-val", `${capDb(t, +$("tone-cap").value)} dB`);
+  const v = +$("tone-cap").value;
+  setText("tone-cap-val", `${toneSel && toneSel.output === "usb" ? v : capDb(t, v)} dB`);
 }
 
 let toneTimer = null;
 function sendTone() {
   toneTimer = null;
+  if (!toneSel) return;
   post("/api/audio", { bass: +$("tone-bass").value, treble: +$("tone-treble").value,
-    cap: +$("tone-cap").value }).catch(oops);
+    cap: toneSel.cap, usb_cap: toneSel.usb_cap, output: toneSel.output,
+    usb_profile: toneSel.usb_profile }).catch(oops);
 }
 
 function renderSpotify(s) {
@@ -837,12 +900,32 @@ function wireActions() {
     const el_ = $(id);
     el_.addEventListener("pointerdown", () => dragging.add(id));
     el_.addEventListener("input", () => {
+      if (id === "tone-cap" && toneSel) toneSel[toneSel.output === "usb" ? "usb_cap" : "cap"] = +el_.value;
       if (last && last.tone) showTone(last.tone);
       clearTimeout(toneTimer);
       toneTimer = setTimeout(sendTone, 250);
     });
     el_.addEventListener("change", () => setTimeout(() => dragging.delete(id), 2500));
   }
+  for (const r of document.querySelectorAll('input[name="output"]')) {
+    r.addEventListener("change", () => {
+      if (!toneSel || !last || !last.tone) return;
+      dragging.add("output");
+      toneSel.output = r.value;
+      renderTone(last);
+      clearTimeout(toneTimer);
+      sendTone();
+      setTimeout(() => dragging.delete("output"), 2500);
+    });
+  }
+  $("out-mode").addEventListener("change", () => {
+    if (!toneSel) return;
+    dragging.add("out-mode");
+    toneSel.usb_profile = $("out-mode").value;
+    clearTimeout(toneTimer);
+    sendTone();
+    setTimeout(() => dragging.delete("out-mode"), 4000);
+  });
   $("tone-reset").addEventListener("click", () => {
     $("tone-bass").value = 0; $("tone-treble").value = 0;
     if (last && last.tone) showTone(last.tone);

@@ -123,6 +123,25 @@ TREBLE_DB=0
 MAX_VOLUME=${AUDIO_HW_VOLUME_MAX:-15}
 EOF
 fi
+# Settings added since: appended with their defaults to an older audio.conf.
+grep -q '^OUTPUT=' /etc/panda/audio.conf || cat >> /etc/panda/audio.conf <<EOF
+# Output: onboard (the board's jack) or usb (a USB audio card, when plugged in;
+# the onboard output otherwise). A board without onboard audio uses USB only.
+OUTPUT=$([ -n "${AUDIO_CARD:-}" ] && echo onboard || echo usb)
+EOF
+grep -q '^USB_MAX_DB=' /etc/panda/audio.conf || cat >> /etc/panda/audio.conf <<EOF
+# USB output volume cap in dB (-30..0, software).
+USB_MAX_DB=0
+EOF
+grep -q '^USB_PROFILE=' /etc/panda/audio.conf || cat >> /etc/panda/audio.conf <<EOF
+# USB card output mode: auto, or an ACP profile name (output:analog-stereo,
+# output:iec958-stereo, pro-audio, ...; the web page lists the card's).
+USB_PROFILE=auto
+EOF
+grep -q '^MASTER_VOLUME=' /etc/panda/audio.conf || cat >> /etc/panda/audio.conf <<EOF
+# Master volume (web page slider, 0..1 on its cubic scale), restored at boot.
+MASTER_VOLUME=1.0
+EOF
 # A cap above the board's maximum (board.conf corrected since) is lowered to it.
 cap=$(sed -n 's/^MAX_VOLUME=//p' /etc/panda/audio.conf)
 if [ -n "${AUDIO_HW_VOLUME_MAX:-}" ] && [ "${cap:-0}" -gt "$AUDIO_HW_VOLUME_MAX" ] 2>/dev/null; then

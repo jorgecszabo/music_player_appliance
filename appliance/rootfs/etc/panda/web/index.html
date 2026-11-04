@@ -122,7 +122,19 @@
         <label class="check"><input type="checkbox" id="master-mute"> Mute</label>
       </div>
     </div>
-    <p class="small">Each source also has its own volume (the phone or app controls it too). The board's hardware gain is the ceiling.</p>
+    <p class="small">Each source also has its own volume (the phone or app controls it too). Max volume (below) is the ceiling.</p>
+    <fieldset class="group">
+      <legend>Output device</legend>
+      <div class="output-list">
+        <label class="check" id="out-onboard-line"><input type="radio" name="output" id="out-onboard" value="onboard"> Built-in audio jack</label>
+        <label class="check"><input type="radio" name="output" id="out-usb" value="usb"> <span id="out-usb-name">USB audio</span></label>
+        <label class="usb-mode" id="out-mode-line" hidden>Mode <select id="out-mode" aria-label="USB card output mode"></select></label>
+      </div>
+      <p class="small" id="out-status">-</p>
+      <p class="small">Mode: how the USB card is driven (its PipeWire profiles). Automatic is the
+        card's best; try another if a quirky card stays silent. Pro Audio skips the channel and mixer
+        logic.</p>
+    </fieldset>
     <fieldset class="group">
       <legend>Tone &amp; volume cap</legend>
       <div class="tone-grid">
@@ -132,7 +144,7 @@
         <label for="tone-treble">Treble</label>
         <input type="range" id="tone-treble" min="-12" max="12" step="1">
         <span class="tone-val" id="tone-treble-val">0 dB</span>
-        <label for="tone-cap" class="cap-row">Max volume</label>
+        <label for="tone-cap" class="cap-row" id="tone-cap-label">Max volume</label>
         <input type="range" id="tone-cap" class="cap-row" min="0" max="15" step="1">
         <span class="tone-val cap-row" id="tone-cap-val">0 dB</span>
       </div>
@@ -140,8 +152,9 @@
         <button class="btn" id="tone-reset" type="button">Flat</button>
       </div>
       <p class="small">Bass 100 Hz and treble 8 kHz shelves. Headroom adjusts itself so boosting never
-        clips. Max volume is the amplifier gain: the loudest the speaker can get. Saved to the card
-        15 seconds after the last change.</p>
+        clips. Max volume is the loudest the speaker can get: the amplifier gain for the built-in jack, a
+        software limit for a USB card (which runs at its full level). Each output keeps its own. Saved to
+        the card 15 seconds after the last change.</p>
     </fieldset>
   </div>
 </section>

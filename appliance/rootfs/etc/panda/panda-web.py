@@ -9,13 +9,15 @@ firewall redirects port 80 to it. LAN only (firewall).
   GET  /api/events           the same, live, as server-sent events
   GET  /api/logs?name=<log>  last lines of a service log
   POST /api/volume           {"id": <node>, "volume": 0..1} | {"id", "mute": bool}
+                           (the master volume is remembered: audio.conf, saved after 15 s)
   POST /api/bt               {"cmd": "pair", "open": bool} | {"cmd": "forget", "path"}
                              | {"cmd": "forget-all"}       (panda-bt control socket)
   POST /api/service          {"name": <service>} | {"name": "audio"}
   POST /api/system           {"action": "save" | "reboot"}
   POST /api/name             {"name": <speaker name>}
   POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
-  POST /api/audio            {"bass": dB, "treble": dB, "cap": step}  (saved after 15 s)
+  POST /api/audio            {"bass": dB, "treble": dB, "cap": step, "output": "onboard"|"usb",
+                              "usb_cap": dB, "usb_profile": "auto"|<profile name>}  (saved after 15 s)
   GET  /api/radio/search     ?q=&tag=&country=&order=votes|clickcount|name&page=N  (radio-browser.info)
   GET  /api/radio/tags       ?q=<text>   genre suggestions (most stations first)
   GET  /api/radio/countries  all countries with stations (code, name, count)
@@ -328,6 +330,10 @@ class PwObjects:
         with self.lock:
             return [o for o in self.objects.values() if o.get("type") == "PipeWire:Interface:Node"]
 
+    def devices(self):
+        with self.lock:
+            return [o for o in self.objects.values() if o.get("type") == "PipeWire:Interface:Device"]
+
 
 PW = PwObjects()
 
@@ -525,10 +531,15 @@ class Collector:
             except (TypeError, ValueError):
                 return d
         hw_max = num(board.get("AUDIO_HW_VOLUME_MAX"))
+        onboard = bool(board.get("AUDIO_CARD"))
         return {"bass": num(a.get("BASS_DB")), "treble": num(a.get("TREBLE_DB")),
                 "cap": num(a.get("MAX_VOLUME"), hw_max), "cap_max": hw_max,
                 "cap_step_db": num(board.get("AUDIO_HW_VOLUME_STEP_DB"), 1),
-                "available": bool(board.get("AUDIO_HW_VOLUME_CONTROL"))}
+                "available": bool(board.get("AUDIO_HW_VOLUME_CONTROL")),
+                "onboard": onboard,
+                "output": a.get("OUTPUT") or ("onboard" if onboard else "usb"),
+                "usb_cap": num(a.get("USB_MAX_DB"), 0), "usb_cap_min": -30,
+                "usb_profile": a.get("USB_PROFILE") or "auto"}
 
     def spotify(self):
         """Whether an API key is set and when it changed. Never the key itself."""
@@ -554,8 +565,9 @@ class Collector:
         return res
 
     def audio(self):
+        self.board_card = shell_conf("/etc/panda/board.conf").get("AUDIO_CARD") or None
         top = self.slow.get("pwtop") or {}
-        sink, output, streams = None, None, []
+        sink, streams, outputs = None, [], []
         for o in PW.nodes():
             info = o.get("info") or {}
             props = info.get("props") or {}
@@ -580,7 +592,10 @@ class Collector:
             if cls == "Audio/Sink" and node["name"] == "panda-eq":
                 sink = node          # master volume: the tone filter's sink
             elif cls == "Audio/Sink" and node["name"].startswith("alsa_output"):
-                output = node        # the codec, fixed at 100%
+                # A USB card other than the board's own (board.conf AUDIO_CARD).
+                node["usb"] = (props.get("device.bus") == "usb"
+                               and props.get("api.alsa.card.name") != self.board_card)
+                outputs.append(node)
             elif cls == "Stream/Output/Audio" and node["name"] not in ("chime", "panda-eq.output"):
                 n = node["name"]
                 app = props.get("application.name", "")
@@ -597,13 +612,48 @@ class Collector:
                 else:
                     node["source"] = app or n
                 streams.append(node)
-        if sink is None:     # no tone filter: the codec's sink is the master
+        output = self.effective_output(outputs)
+        if sink is None:     # no tone filter: the output's sink is the master
             sink = output
         if sink is not None and output is not None and sink is not output:
             sink = {**sink, "format": output["format"], "rate": output["rate"],
                     "quantum": output.get("quantum"), "errors": output.get("errors"),
                     "description": output["description"] + " (via tone filter)"}
-        return {"sink": sink, "streams": streams}
+        return {"sink": sink, "streams": streams, "output": output["name"] if output else None,
+                "outputs": [{"id": o["id"], "name": o["name"], "description": o["description"],
+                             "usb": o["usb"], "state": o["state"]} for o in outputs],
+                "usb_card": self.usb_card()}
+
+    def usb_card(self):
+        """The first USB audio card: its output modes (ACP profiles) and the current one."""
+        cards = []
+        for d in PW.devices():
+            info = d.get("info") or {}
+            props, params = info.get("props") or {}, info.get("params") or {}
+            if (props.get("device.bus") != "usb" or props.get("device.api") != "alsa"
+                    or props.get("api.alsa.card.name") == self.board_card):
+                continue
+            cards.append({
+                "id": d["id"],
+                "description": props.get("device.description") or props.get("device.name", ""),
+                "profile": ((params.get("Profile") or [{}])[0]).get("name"),
+                "profiles": [{"name": p.get("name"), "description": p.get("description") or p.get("name"),
+                              "available": p.get("available")}
+                             for p in sorted(params.get("EnumProfile") or [],
+                                             key=lambda p: -p.get("priority", 0))
+                             if p.get("name") != "off"],
+            })
+        return min(cards, key=lambda c: c["id"]) if cards else None
+
+    def effective_output(self, outputs):
+        """Where the tone filter plays: the same choice as audio-route.py makes."""
+        board = shell_conf("/etc/panda/board.conf")
+        want = shell_conf("/etc/panda/audio.conf").get("OUTPUT", "onboard")
+        usb = sorted((o for o in outputs if o["usb"]), key=lambda o: o["id"])
+        if want == "usb" and usb:
+            return usb[0]
+        onboard = [o for o in outputs if o["name"] == board.get("AUDIO_PW_SINK")]
+        return (onboard or [o for o in outputs if not o["usb"]] or usb or [None])[0]
 
 
 COLLECTOR = Collector()
@@ -624,6 +674,23 @@ def schedule_save(delay=15):
         _save_timer = threading.Timer(delay, save)
         _save_timer.daemon = True
         _save_timer.start()
+
+
+_master_timer = None
+
+
+def remember_master(v, delay=2):
+    """Write the master volume to audio.conf once the slider rests, then save."""
+    global _master_timer
+    def write():
+        if run(ADMIN + ["set-master", f"{v:.3f}"], timeout=20).strip() == "ok":
+            schedule_save()
+    with _save_lock:
+        if _master_timer:
+            _master_timer.cancel()
+        _master_timer = threading.Timer(delay, write)
+        _master_timer.daemon = True
+        _master_timer.start()
 
 
 def local_hosts():
@@ -842,6 +909,8 @@ class Handler(BaseHTTPRequestHandler):
         if "volume" in req:
             v = min(1.0, max(0.0, float(req["volume"])))
             run(["wpctl", "set-volume", str(node), f"{v:.3f}"], env=PW_ENV)
+            if audio.get("sink") and node == audio["sink"]["id"]:
+                remember_master(v)
         return {"ok": True}
 
     def bt(self, req):
@@ -943,10 +1012,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def audio_settings(self, req):
         try:
-            b, t, c = (int(req.get(k)) for k in ("bass", "treble", "cap"))
+            b, t, c, u = (int(req.get(k)) for k in ("bass", "treble", "cap", "usb_cap"))
         except (TypeError, ValueError):
-            raise ValueError("bass, treble and cap must be integers")
-        out = run(ADMIN + ["set-audio", str(b), str(t), str(c)], timeout=20).strip()
+            raise ValueError("bass, treble, cap and usb_cap must be integers")
+        o = req.get("output")
+        if o not in ("onboard", "usb"):
+            raise ValueError("output must be onboard or usb")
+        p = str(req.get("usb_profile") or "auto")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:+._-]{0,79}", p):
+            raise ValueError("bad USB mode")
+        out = run(ADMIN + ["set-audio", str(b), str(t), str(c), o, str(u), p], timeout=30).strip()
         if out != "ok":
             raise ValueError("rejected")
         schedule_save()

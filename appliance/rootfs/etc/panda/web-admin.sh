@@ -16,8 +16,10 @@
 #   web-admin.sh soloist-key-status  "set <mtime>" or "missing" (never the key)
 #   web-admin.sh factory-reset       restore the factory overlay and reboot
 #   web-admin.sh factory-reset-dry   only show what a factory reset would do
-#   web-admin.sh set-audio <bass dB> <treble dB> <cap step>
-#                                    tone + volume cap: audio.conf, applied live
+#   web-admin.sh set-master <0..1>   remember the master volume (audio.conf; restored at
+#                                    boot by audio-route.py --master; not applied here)
+#   web-admin.sh set-audio <bass dB> <treble dB> <cap step> <onboard|usb> <usb cap dB> <usb mode>
+#                                    tone, volume caps, output: audio.conf, applied live
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /etc/panda/board.conf
@@ -108,16 +110,24 @@ factory-reset)
 factory-reset-dry)
 	/etc/panda/factory-reset.sh --dry-run 2>&1 || true ;;
 set-audio)
-	b="${2:-}" t="${3:-}" m="${4:-}"
+	b="${2:-}" t="${3:-}" m="${4:-}" o="${5:-}" u="${6:-}" p="${7:-auto}"
 	for v in "$b" "$t"; do
 		printf '%s' "$v" | grep -Eq '^-?[0-9]{1,2}$' && [ "$v" -ge -12 ] && [ "$v" -le 12 ] \
 			|| die "tone must be an integer -12..12 dB"
 	done
 	printf '%s' "$m" | grep -Eq '^[0-9]{1,3}$' && [ "$m" -le "${AUDIO_HW_VOLUME_MAX:-0}" ] \
 		|| die "cap must be 0..${AUDIO_HW_VOLUME_MAX:-0}"
+	case "$o" in onboard|usb) ;; *) die "output must be onboard or usb" ;; esac
+	printf '%s' "$u" | grep -Eq '^-?[0-9]{1,2}$' && [ "$u" -ge -30 ] && [ "$u" -le 0 ] \
+		|| die "USB cap must be an integer -30..0 dB"
+	# "auto" or an ACP profile name (e.g. output:analog-stereo, pro-audio).
+	printf '%s' "$p" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9:+._-]{0,79}$' || die "bad USB mode"
 	f=/etc/panda/audio.conf
+	grep -q '^USB_PROFILE=' "$f" || echo "USB_PROFILE=auto" >> "$f"
 	sed -e "s/^BASS_DB=.*/BASS_DB=$b/" -e "s/^TREBLE_DB=.*/TREBLE_DB=$t/" \
-		-e "s/^MAX_VOLUME=.*/MAX_VOLUME=$m/" "$f" > "$f.new" && mv "$f.new" "$f"
+		-e "s/^MAX_VOLUME=.*/MAX_VOLUME=$m/" -e "s/^OUTPUT=.*/OUTPUT=$o/" \
+		-e "s/^USB_MAX_DB=.*/USB_MAX_DB=$u/" -e "s/^USB_PROFILE=.*/USB_PROFILE=$p/" \
+		"$f" > "$f.new" && mv "$f.new" "$f"
 	# Boot config, and the running filter (headroom follows the largest boost).
 	sh /etc/panda/tone-conf.sh > /etc/pipewire/pipewire.conf.d/20-panda-tone.conf
 	mult=$(awk -v b="$b" -v t="$t" 'BEGIN { m = b; if (t > m) m = t; if (m < 0) m = 0
@@ -126,6 +136,19 @@ set-audio)
 	id=$(pw-cli ls Node 2>/dev/null | awk '/^\tid /{ id = $2 } /node.name = "panda-eq"/{ print id + 0; exit }')
 	[ -n "$id" ] && pw-cli s "$id" Props "{ params = [ \"bass:Gain\" $b.0 \"treble:Gain\" $t.0 \"pre:Mult\" $mult ] }" >/dev/null 2>&1
 	[ -n "${AUDIO_HW_VOLUME_CONTROL:-}" ] && amixer -q -c "$AUDIO_CARD" sset "$AUDIO_HW_VOLUME_CONTROL" "$m"
+	# Output choice and the USB cap. As user speaker: PipeWire ignores a root
+	# client's metadata writes (the output choice), silently.
+	su -s /bin/sh -c 'python3 /etc/panda/audio-route.py' speaker >/dev/null 2>&1 || true
+	echo ok ;;
+set-master)
+	v="${2:-}"
+	printf '%s' "$v" | grep -Eq '^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$' || die "volume must be 0..1"
+	f=/etc/panda/audio.conf
+	if grep -q '^MASTER_VOLUME=' "$f"; then
+		sed "s/^MASTER_VOLUME=.*/MASTER_VOLUME=$v/" "$f" > "$f.new" && mv "$f.new" "$f"
+	else
+		echo "MASTER_VOLUME=$v" >> "$f"
+	fi
 	echo ok ;;
 soloist-key-status)
 	f=/etc/panda/soloist.key

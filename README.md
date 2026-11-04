@@ -87,7 +87,8 @@ Steps:
    `mkdir -p /tmp/c && cp boards/<board>/board.conf appliance/appliance.conf /tmp/c/ &&
    CONF_DIR=/tmp/c ROOT=/tmp/out sh appliance/rootfs/etc/panda/gen-configs.sh`
 4. Kernel: use an Alpine flavor if it supports the board, or add `aports/linux-<board>`.
-   Needs: the audio codec, the watchdog, the BT controller (or `btusb`), gpio-keys for the
+   Needs: the audio codec, `SND_USB_AUDIO` (USB audio output; the kernel APKBUILDs check it),
+   the watchdog, the BT controller (or `btusb`), gpio-keys for the
    button, `nf_tables`, and a fast entropy source (getrandom must not block at boot).
 5. Write `write-sdcard.sh` for the board's boot ROM, then
    `BOARD=<board> scripts/build-package.sh <kernel> && BOARD=<board> scripts/build-image.sh`.

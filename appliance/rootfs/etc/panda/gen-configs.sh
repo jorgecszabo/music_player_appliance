@@ -15,6 +15,8 @@ HERE="$(dirname "$(readlink -f "$0")")"
 . "$CONF_DIR"/board.conf
 . "$CONF_DIR"/appliance.conf
 [ -f "$CONF_DIR"/audio.conf ] && . "$CONF_DIR"/audio.conf
+# A board without an onboard output (USB audio only) leaves AUDIO_CARD empty.
+AUDIO_CARD="${AUDIO_CARD:-}"
 
 # --- Defaults for boards that don't set these --------------------------------------
 # Graph quantum (frames). Big = robust; latency doesn't matter for a speaker.
@@ -84,6 +86,8 @@ wireplumber.profiles = {
 # Startup volume: the output at 100% (0 dB) on every boot. The hardware gain
 # (board.conf AUDIO_HW_VOLUME_*, audio.conf MAX_VOLUME) is the loudness cap;
 # each source controls its own stream volume. WirePlumber's state is in RAM.
+# (The master volume, the tone filter's, comes from audio.conf MASTER_VOLUME:
+# audio-route.py --master.)
 wireplumber.settings = {
   device.routes.default-sink-volume = 1.0
   node.stream.default-playback-volume = 1.0
@@ -113,18 +117,35 @@ monitor.bluez.rules = [
 
 monitor.alsa.rules = [
   {
-    # Only the board's audio output; ignore other cards (e.g. HDMI).
+    # The board's own card and USB audio cards only; ignore the rest (e.g. HDMI).
     matches = [ { device.name = "~alsa_card.*", api.alsa.card.name = "!$AUDIO_CARD" } ]
     actions = { update-props = { device.disabled = true } }
   }
   {
+    # USB audio (class-compliant DACs, USB speakers): an alternative output,
+    # chosen on the web page (audio.conf OUTPUT, applied by audio-route.py).
+    matches = [ { device.name = "~alsa_card.*", device.bus = "usb" } ]
+    actions = { update-props = { device.disabled = false } }
+  }
+  {
     # Volume in software only. Otherwise ACP may map the output volume onto the
-    # codec's hardware gain, and the hardware gain could never be a cap.
-    matches = [ { device.name = "~alsa_card.*", api.alsa.card.name = "$AUDIO_CARD" } ]
+    # codec's hardware gain, and the hardware gain could never be a cap. (USB
+    # cards: audio-route.py sets their hardware controls to 0 dB.)
+    matches = [
+      { device.name = "~alsa_card.*", api.alsa.card.name = "$AUDIO_CARD" }
+      { device.name = "~alsa_card.*", device.bus = "usb" }
+    ]
     actions = { update-props = { api.alsa.soft-mixer = true } }
   }
   {
-    matches = [ { node.name = "~alsa_output.*" } ]
+    # A speaker: no capture from USB cards (e.g. a USB headset's microphone).
+    matches = [ { node.name = "~alsa_input.*", device.bus = "usb" } ]
+    actions = { update-props = { node.disabled = true } }
+  }
+  {
+    # The board's own output: fixed format and codec quirks. USB outputs keep
+    # their defaults (PipeWire resamples to whatever rate the card supports).
+    matches = [ { node.name = "~alsa_output.*", api.alsa.card.name = "$AUDIO_CARD" } ]
     actions = {
       update-props = {
         ${AUDIO_RATE:+audio.rate = $AUDIO_RATE}

@@ -27,7 +27,9 @@ _defconfig=omap2plus_defconfig
 _fragment=pandaboard.config
 _dtbs="ti/omap/omap4-panda*.dtb"
 # The staged config must have this (catches a wrong or stale staging dir).
-_kconfig_check="CONFIG_ARCH_OMAP4=y"
+# Required options (grep -xE patterns): the SoC, and USB audio (the appliance's
+# alternative output, audio-route.py).
+_kconfig_check="CONFIG_ARCH_OMAP4=y CONFIG_SND_USB_AUDIO=[ym]"
 _staging="${PANDA_KERNEL_STAGING:-/work/build/kernel-staging/$_flavor}"
 
 package() {
@@ -36,8 +38,11 @@ package() {
 		|| die "no staged kernel in $_staging (run cross-build.sh)"
 	[ "$(cat "$_staging"/usr/share/kernel/$_flavor/kernel.release)" = "$_rel" ] \
 		|| die "staged kernel is not $_rel"
-	grep -qx "$_kconfig_check" "$_staging"/boot/config-$_flavor \
-		|| die "staged config lacks $_kconfig_check"
+	local _c
+	for _c in $_kconfig_check; do
+		grep -qxE "$_c" "$_staging"/boot/config-$_flavor \
+			|| die "staged config lacks $_c"
+	done
 
 	mkdir -p "$pkgdir"
 	cp -a "$_staging"/. "$pkgdir"/

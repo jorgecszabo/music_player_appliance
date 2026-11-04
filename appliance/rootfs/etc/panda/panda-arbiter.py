@@ -18,11 +18,13 @@ from panda-bt (AVRCP).
 import base64
 import json
 import os
+import pty
 import re
 import subprocess
 import sys
 import threading
 import time
+import tty
 
 RT = "/opt/soloist-runtime"
 SOLOIST_WS = "127.0.0.1:47000"
@@ -103,30 +105,40 @@ class Arbiter:
 
     # --- PipeWire ------------------------------------------------------------------
     def monitor(self):
-        p = subprocess.Popen(["pw-dump", "--monitor", "--no-colors"], stdout=subprocess.PIPE, text=True)
-        dec = json.JSONDecoder()
-        buf = ""
-        for chunk in p.stdout:
-            buf += chunk
-            while True:
-                s = buf.lstrip()
-                if not s:
-                    buf = ""
-                    break
+        # pw-dump block-buffers a pipe (events would arrive in late bursts): give
+        # it a pseudo-terminal, which it line-buffers.
+        master, slave = pty.openpty()
+        tty.setraw(slave)
+        p = subprocess.Popen(["pw-dump", "--monitor", "--no-colors"], stdout=slave,
+                             stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.close(slave)
+        # pw-dump prints objects inside long-lived top-level arrays; each object
+        # starts with "  {" and ends with "  }" / "  }," (2-space indent). Parse
+        # each object as soon as it's complete (waiting for "]" delays events,
+        # and re-parsing the whole buffer per line is quadratic).
+        obj = None
+        for line in os.fdopen(master, "r", errors="replace"):
+            if obj is None:
+                if line.rstrip() == "  {":
+                    obj = [line]
+                continue
+            obj.append(line)
+            if line.rstrip() in ("  }", "  },"):
+                text = "".join(obj).rstrip().rstrip(",")
+                obj = None
                 try:
-                    obj, end = dec.raw_decode(s)
+                    self.update(json.loads(text))
                 except ValueError:
-                    break  # incomplete; read more
-                buf = s[end:]
-                if isinstance(obj, list):
-                    for o in obj:
-                        self.update(o)
+                    pass
         log("pw-dump exited; restarting")
         sys.exit(1)
 
     def update(self, o):
         oid = o.get("id")
         info = o.get("info")
+        if os.environ.get("ARBITER_DEBUG") == "2":
+            log(f"debug2: obj {oid} {o.get('type')} state={(info or {}).get('state')} "
+                f"name={((info or {}).get('props') or {}).get('node.name')}")
         if info is None:          # object removed
             with self.lock:
                 st = self.streams.pop(oid, None)
@@ -134,12 +146,13 @@ class Arbiter:
             if st:
                 self.stream_gone(st)
             return
-        if o.get("type") != "PipeWire:Interface:Node":
-            return
+        # Updates are partial (only the changed fields, often without "type").
         props = info.get("props") or {}
         with self.lock:
             known = self.streams.get(oid)
         if known is None:
+            if o.get("type") != "PipeWire:Interface:Node":
+                return
             if props.get("media.class") != "Stream/Output/Audio" or props.get("node.name") in IGNORE:
                 return
             known = {"source": source_of(props), "state": None, "since": 0.0, "props": props}
@@ -150,6 +163,8 @@ class Arbiter:
         state = info.get("state")
         if state and state != known["state"]:
             prev, known["state"] = known["state"], state
+            if os.environ.get("ARBITER_DEBUG"):
+                log(f"debug: {known['source']} node {oid}: {prev} -> {state}")
             if state == "running" and prev != "running":
                 known["since"] = time.monotonic()
                 threading.Thread(target=self.started, args=(oid,), daemon=True).start()

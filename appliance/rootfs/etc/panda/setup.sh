@@ -143,6 +143,13 @@ monitor.alsa.rules = [
     actions = { update-props = { device.disabled = true } }
   }
   {
+    # Volume in software only. Otherwise the fallback profile maps the output
+    # volume onto the codec's hardware gain (100% = Headset 0 dB, overriding
+    # board.conf's AUDIO_MIXER), so the hardware gain could never be a cap.
+    matches = [ { device.name = "~alsa_card.*", api.alsa.card.name = "$AUDIO_CARD" } ]
+    actions = { update-props = { api.alsa.soft-mixer = true } }
+  }
+  {
     matches = [ { node.name = "~alsa_output.*" } ]
     actions = {
       update-props = {

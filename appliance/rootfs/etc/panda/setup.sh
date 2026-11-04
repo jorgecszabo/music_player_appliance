@@ -11,7 +11,10 @@ set -eu
 log() { echo "panda-setup: $*"; logger -t panda-setup "$*" 2>/dev/null || true; }
 
 PACKAGES="alsa-utils pipewire pipewire-alsa pipewire-tools wireplumber shairport-sync nftables
-	bluez pipewire-spa-bluez python3 py3-evdev py3-dbus-next"
+	bluez pipewire-spa-bluez python3 py3-evdev py3-dbus-next
+	pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse"
+# (Alpine ships libpipewire-module-filter-chain in pipewire-pulse; the pulse
+# server itself is not started.)
 
 # --- Repositories: boot media first, then the online main + community ----------
 rel="v$(cut -d. -f1,2 /etc/alpine-release)"
@@ -85,6 +88,21 @@ stream.properties = {
     resample.quality = 4
 }
 EOF
+
+# --- Tone, headroom and volume cap (/etc/panda/audio.conf, the owner's settings) ---
+# Created with defaults once; the web page changes it (web-admin.sh set-audio).
+if [ ! -f /etc/panda/audio.conf ]; then
+	cat > /etc/panda/audio.conf <<EOF
+# Owner's audio settings (web page). Shell syntax.
+# Bass/treble shelves in dB (-12..12).
+BASS_DB=0
+TREBLE_DB=0
+# Volume cap: hardware gain step (0..AUDIO_HW_VOLUME_MAX in board.conf).
+MAX_VOLUME=${AUDIO_HW_VOLUME_MAX:-15}
+EOF
+fi
+. /etc/panda/audio.conf
+sh /etc/panda/tone-conf.sh > /etc/pipewire/pipewire.conf.d/20-panda-tone.conf
 
 # --- WirePlumber: embedded profile, only the board's sound card -------------------
 mkdir -p /etc/wireplumber/wireplumber.conf.d

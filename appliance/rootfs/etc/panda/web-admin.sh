@@ -14,6 +14,8 @@
 #   web-admin.sh set-soloist-key     new Spotify API key from stdin (never argv),
 #                                    save, restart Soloist, report if it runs
 #   web-admin.sh soloist-key-status  "set <mtime>" or "missing" (never the key)
+#   web-admin.sh set-audio <bass dB> <treble dB> <cap step>
+#                                    tone + volume cap: audio.conf, applied live
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /etc/panda/board.conf
@@ -95,6 +97,26 @@ set-soloist-key)
 	rc-service speaker-soloist restart >/dev/null 2>&1 || true
 	sleep 6
 	if rc-service speaker-soloist status >/dev/null 2>&1; then echo running; else echo "not running"; fi ;;
+set-audio)
+	b="${2:-}" t="${3:-}" m="${4:-}"
+	for v in "$b" "$t"; do
+		printf '%s' "$v" | grep -Eq '^-?[0-9]{1,2}$' && [ "$v" -ge -12 ] && [ "$v" -le 12 ] \
+			|| die "tone must be an integer -12..12 dB"
+	done
+	printf '%s' "$m" | grep -Eq '^[0-9]{1,3}$' && [ "$m" -le "${AUDIO_HW_VOLUME_MAX:-0}" ] \
+		|| die "cap must be 0..${AUDIO_HW_VOLUME_MAX:-0}"
+	f=/etc/panda/audio.conf
+	sed -e "s/^BASS_DB=.*/BASS_DB=$b/" -e "s/^TREBLE_DB=.*/TREBLE_DB=$t/" \
+		-e "s/^MAX_VOLUME=.*/MAX_VOLUME=$m/" "$f" > "$f.new" && mv "$f.new" "$f"
+	# Boot config, and the running filter (headroom follows the largest boost).
+	sh /etc/panda/tone-conf.sh > /etc/pipewire/pipewire.conf.d/20-panda-tone.conf
+	mult=$(awk -v b="$b" -v t="$t" 'BEGIN { m = b; if (t > m) m = t; if (m < 0) m = 0
+		printf "%.6f", 10 ^ (-(3 + m) / 20) }')
+	export PIPEWIRE_RUNTIME_DIR=/run/speaker XDG_RUNTIME_DIR=/run/speaker
+	id=$(pw-cli ls Node 2>/dev/null | awk '/^\tid /{ id = $2 } /node.name = "panda-eq"/{ print id + 0; exit }')
+	[ -n "$id" ] && pw-cli s "$id" Props "{ params = [ \"bass:Gain\" $b.0 \"treble:Gain\" $t.0 \"pre:Mult\" $mult ] }" >/dev/null 2>&1
+	[ -n "${AUDIO_HW_VOLUME_CONTROL:-}" ] && amixer -q -c "$AUDIO_CARD" sset "$AUDIO_HW_VOLUME_CONTROL" "$m"
+	echo ok ;;
 soloist-key-status)
 	f=/etc/panda/soloist.key
 	if [ -s "$f" ]; then echo "set $(date -r "$f" -u +%Y-%m-%dT%H:%M:%SZ)"; else echo missing; fi ;;

@@ -32,5 +32,11 @@ start() {
 	done <<-MIXER
 	$AUDIO_MIXER
 	MIXER
+	# The volume cap (hardware gain) from the owner's settings.
+	if [ -n "${AUDIO_HW_VOLUME_CONTROL:-}" ] && [ -f /etc/panda/audio.conf ]; then
+		. /etc/panda/audio.conf
+		[ -n "${MAX_VOLUME:-}" ] && amixer -q -c "$AUDIO_CARD" sset "$AUDIO_HW_VOLUME_CONTROL" "$MAX_VOLUME" \
+			|| { ewarn "amixer: could not set the volume cap"; rc=1; }
+	fi
 	eend $rc
 }

@@ -15,6 +15,7 @@ firewall redirects port 80 to it. LAN only (firewall).
   POST /api/system           {"action": "save" | "reboot"}
   POST /api/name             {"name": <speaker name>}
   POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
+  POST /api/audio            {"bass": dB, "treble": dB, "cap": step}  (saved after 15 s)
 
 Privileged actions run /etc/panda/web-admin.sh through doas (it validates).
 Protections: Host header must name this device (DNS rebinding), and POSTs need
@@ -191,6 +192,7 @@ class Collector:
             "services": self.slow.get("services"),
             "sync": self.slow.get("sync"),
             "lbu": self.slow.get("lbu"),
+            "tone": self.tone(board),
             "spotify": self.slow.get("spotify"),
         }
 
@@ -266,6 +268,19 @@ class Collector:
                 "offset": info.get("System time", ""), "leap": info.get("Leap status", ""),
                 "raw": out.strip() if not info else ""}
 
+    def tone(self, board):
+        a = shell_conf("/etc/panda/audio.conf")
+        def num(v, d=0):
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return d
+        hw_max = num(board.get("AUDIO_HW_VOLUME_MAX"))
+        return {"bass": num(a.get("BASS_DB")), "treble": num(a.get("TREBLE_DB")),
+                "cap": num(a.get("MAX_VOLUME"), hw_max), "cap_max": hw_max,
+                "cap_step_db": num(board.get("AUDIO_HW_VOLUME_STEP_DB"), 1),
+                "available": bool(board.get("AUDIO_HW_VOLUME_CONTROL"))}
+
     def spotify(self):
         """Whether an API key is set and when it changed. Never the key itself."""
         out = run(ADMIN + ["soloist-key-status"]).split()
@@ -295,7 +310,7 @@ class Collector:
         except ValueError:
             dump = []
         top = self.slow.get("pwtop") or {}
-        sink, streams = None, []
+        sink, output, streams = None, None, []
         for o in dump:
             if o.get("type") != "PipeWire:Interface:Node":
                 continue
@@ -319,9 +334,11 @@ class Collector:
                 **top.get(o["id"], {}),
             }
             cls = props.get("media.class", "")
-            if cls == "Audio/Sink" and node["name"].startswith("alsa_output"):
-                sink = node
-            elif cls == "Stream/Output/Audio" and node["name"] != "chime":
+            if cls == "Audio/Sink" and node["name"] == "panda-eq":
+                sink = node          # master volume: the tone filter's sink
+            elif cls == "Audio/Sink" and node["name"].startswith("alsa_output"):
+                output = node        # the codec, fixed at 100%
+            elif cls == "Stream/Output/Audio" and node["name"] not in ("chime", "panda-eq.output"):
                 n = node["name"]
                 app = props.get("application.name", "")
                 if n.startswith("bluez_input"):
@@ -335,10 +352,33 @@ class Collector:
                 else:
                     node["source"] = app or n
                 streams.append(node)
+        if sink is None:     # no tone filter: the codec's sink is the master
+            sink = output
+        if sink is not None and output is not None and sink is not output:
+            sink = {**sink, "format": output["format"], "rate": output["rate"],
+                    "quantum": output.get("quantum"), "errors": output.get("errors"),
+                    "description": output["description"] + " (via tone filter)"}
         return {"sink": sink, "streams": streams}
 
 
 COLLECTOR = Collector()
+
+_save_timer = None
+_save_lock = threading.Lock()
+
+
+def schedule_save(delay=15):
+    """Save to the card once, delay seconds after the last change (debounce)."""
+    global _save_timer
+    def save():
+        run(ADMIN + ["save"], timeout=60)
+        COLLECTOR.refresh("lbu")
+    with _save_lock:
+        if _save_timer:
+            _save_timer.cancel()
+        _save_timer = threading.Timer(delay, save)
+        _save_timer.daemon = True
+        _save_timer.start()
 
 
 def local_hosts():
@@ -472,7 +512,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         handler = {"/api/volume": self.volume, "/api/bt": self.bt,
                    "/api/service": self.service, "/api/system": self.system,
-                   "/api/name": self.name, "/api/spotify-key": self.spotify_key}.get(path)
+                   "/api/name": self.name, "/api/spotify-key": self.spotify_key,
+                   "/api/audio": self.audio_settings}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -534,6 +575,17 @@ class Handler(BaseHTTPRequestHandler):
         out = run(ADMIN + ["set-name", name], timeout=15)
         return {"ok": bool(out.strip()), "result": out.strip()}
 
+
+    def audio_settings(self, req):
+        try:
+            b, t, c = (int(req.get(k)) for k in ("bass", "treble", "cap"))
+        except (TypeError, ValueError):
+            raise ValueError("bass, treble and cap must be integers")
+        out = run(ADMIN + ["set-audio", str(b), str(t), str(c)], timeout=20).strip()
+        if out != "ok":
+            raise ValueError("rejected")
+        schedule_save()
+        return {"ok": True}
 
     def spotify_key(self, req):
         key = str(req.get("key", "")).strip()

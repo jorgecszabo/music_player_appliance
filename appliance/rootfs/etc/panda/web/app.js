@@ -97,6 +97,34 @@ function render(s) {
   renderServices(s);
   renderSave(s);
   renderSpotify(s);
+  renderTone(s);
+}
+
+function capDb(t, step) { return (step - t.cap_max) * t.cap_step_db; }
+
+function renderTone(s) {
+  const t = s.tone;
+  if (!t) return;
+  $("tone-cap").max = t.cap_max;
+  for (const [id, v] of [["tone-bass", t.bass], ["tone-treble", t.treble], ["tone-cap", t.cap]]) {
+    if (dragging.has(id) || toneTimer) continue;
+    $(id).value = v;
+  }
+  showTone(t);
+}
+
+function showTone(t) {
+  const sign = (v) => (v > 0 ? "+" : "") + v;
+  setText("tone-bass-val", `${sign(+$("tone-bass").value)} dB`);
+  setText("tone-treble-val", `${sign(+$("tone-treble").value)} dB`);
+  setText("tone-cap-val", `${capDb(t, +$("tone-cap").value)} dB`);
+}
+
+let toneTimer = null;
+function sendTone() {
+  toneTimer = null;
+  post("/api/audio", { bass: +$("tone-bass").value, treble: +$("tone-treble").value,
+    cap: +$("tone-cap").value }).catch(oops);
 }
 
 function renderSpotify(s) {
@@ -425,6 +453,22 @@ function wireActions() {
       delete $("name-input").dataset.edited;
       info(r.result === "unchanged" ? "That's already the name." : "Renaming... the new name shows up in about 30 seconds.");
     } catch (err) { oops(err); }
+  });
+
+  for (const id of ["tone-bass", "tone-treble", "tone-cap"]) {
+    const el_ = $(id);
+    el_.addEventListener("pointerdown", () => dragging.add(id));
+    el_.addEventListener("input", () => {
+      if (last && last.tone) showTone(last.tone);
+      clearTimeout(toneTimer);
+      toneTimer = setTimeout(sendTone, 250);
+    });
+    el_.addEventListener("change", () => setTimeout(() => dragging.delete(id), 2500));
+  }
+  $("tone-reset").addEventListener("click", () => {
+    $("tone-bass").value = 0; $("tone-treble").value = 0;
+    if (last && last.tone) showTone(last.tone);
+    sendTone();
   });
 
   $("key-form").addEventListener("submit", async (e) => {

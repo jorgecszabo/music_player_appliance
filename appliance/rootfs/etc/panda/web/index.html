@@ -83,8 +83,23 @@
     <p class="small">Each source also has its own volume (the phone or app controls it too). The board's hardware gain is the ceiling.</p>
     <fieldset class="group">
       <legend>Tone &amp; volume cap</legend>
-      <div class="construction"><span>UNDER CONSTRUCTION</span></div>
-      <p class="small center">Bass, treble and the maximum volume are coming soon. Check back later!</p>
+      <div class="tone-grid">
+        <label for="tone-bass">Bass</label>
+        <input type="range" id="tone-bass" min="-12" max="12" step="1">
+        <span class="tone-val" id="tone-bass-val">0 dB</span>
+        <label for="tone-treble">Treble</label>
+        <input type="range" id="tone-treble" min="-12" max="12" step="1">
+        <span class="tone-val" id="tone-treble-val">0 dB</span>
+        <label for="tone-cap">Max volume</label>
+        <input type="range" id="tone-cap" min="0" max="15" step="1">
+        <span class="tone-val" id="tone-cap-val">0 dB</span>
+      </div>
+      <div class="button-row">
+        <button class="btn" id="tone-reset" type="button">Flat</button>
+      </div>
+      <p class="small">Bass 100 Hz and treble 8 kHz shelves. Headroom adjusts itself so boosting never
+        clips. Max volume is the amplifier gain: the loudest the speaker can get. Saved to the card
+        15 seconds after the last change.</p>
     </fieldset>
   </div>
 </section>

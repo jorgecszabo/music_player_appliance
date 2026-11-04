@@ -291,6 +291,14 @@ input[type="range"]::-moz-range-thumb {
 .channel .vslider::-moz-range-thumb { width: 21px; height: 11px; }
 .channel-value { font: 11px var(--mono); }
 
+.tone-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr 64px;
+  gap: 4px 10px;
+  align-items: center;
+}
+.tone-val { font: 11px var(--mono); text-align: right; }
+
 /* --- Tables -------------------------------------------------------------------- */
 table.grid {
   width: 100%;

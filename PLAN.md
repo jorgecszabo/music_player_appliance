@@ -380,7 +380,23 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   board-selectable scripts (`BOARD=`), container arch from `ALPINE_ARCH`. Verified: the rebuilt
   image is identical apart from the intended overlay changes (`/etc/panda/*.conf`, first-boot
   script reading them). Both conf files were installed on the live board and committed.
-- [ ] Phase 4: audio.
+- [~] **Phase 4** (2026-11-03): audio.
+  - Deploy model: `appliance/rootfs/` (files under /etc) + `/etc/panda/setup.sh` (idempotent:
+    repos, packages, eudev, users, generated configs, services, lbu), pushed by
+    `scripts/deploy.sh [--restart]`.
+  - **eudev instead of mdev**: PipeWire finds cards via libudev, and eudev's libudev reports
+    devices as uninitialized without udevd. (Kernel r2 also enables UEVENT_HELPER like Alpine;
+    not yet installed on the board.)
+  - PipeWire + WirePlumber (profile `panda` = `main-embedded` + no BT/video/dbus) run as user
+    `speaker` under supervise-daemon; the data loop runs SCHED_FIFO 88 via `rc_ulimit -r 95 -e 40`.
+    Fixed 96 kHz S32LE, quantum 2048; HDMI card disabled by a WirePlumber rule.
+  - **TWL6040 crackle findings:** the codec crackles whenever the PCM is open without data
+    (idle-open, or during a suspend timeout). It also underran about 3x/s under PipeWire's
+    timer-based scheduling (coarse McPDM/sDMA position). Fix: never suspend,
+    `node.pause-on-idle=false`, `node.always-process=true` (feed silence from boot),
+    `api.alsa.disable-tsched=true`, period 2048 x 4. Verified: 0 errors and clean audio idle
+    and playing. Cost: PipeWire about 1% CPU at idle.
+  - Next: spotifyd, shairport-sync, firewall, measurements.
 
 ### Project layout
 

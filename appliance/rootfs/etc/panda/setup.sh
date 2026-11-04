@@ -103,8 +103,18 @@ monitor.alsa.rules = [
       update-props = {
         audio.rate = $AUDIO_RATE
         audio.channels = $AUDIO_CHANNELS
-        # Keep the codec powered while idle: no pops when playback starts.
+        # The TWL6040 crackles when the device is open without data (idle),
+        # and closing it on idle (suspend) gives crackle during the timeout.
+        # So never suspend, and keep the graph running: idle = real silence.
         session.suspend-timeout-seconds = 0
+        node.pause-on-idle = false
+        # ...and run from boot, even before the first stream connects.
+        node.always-process = true
+        # Interrupt-driven scheduling: the OMAP4 McPDM/sDMA position is too coarse
+        # for timer-based scheduling (about 3 underruns/s = crackle; 0 with IRQs).
+        api.alsa.disable-tsched = true
+        api.alsa.period-size = 2048
+        api.alsa.period-num = 4
       }
     }
   }

@@ -23,8 +23,10 @@ tar -C "$STAGE" --owner=0 --group=0 -czf - etc \
 
 if [ "$RESTART" = "--restart" ]; then
     ssh -o BatchMode=yes "$HOST" 'doas sh -c "
-        for s in panda-audio-init speaker-pipewire speaker-wireplumber; do
-            rc-service \$s restart || exit 1
-        done
+        # Stop dependents first, then start in order (restarting pipewire on
+        # its own stops wireplumber without openrc noticing).
+        rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
+        rc-service panda-audio-init restart || exit 1
+        rc-service speaker-pipewire start && rc-service speaker-wireplumber start || exit 1
         sleep 2; rc-status default | grep -E \"panda|speaker\""'
 fi

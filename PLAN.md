@@ -419,7 +419,23 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     `node.pause-on-idle=false`, `node.always-process=true` (feed silence from boot),
     `api.alsa.disable-tsched=true`, period 2048 x 4. Verified: 0 errors and clean audio idle
     and playing. Cost: PipeWire about 1% CPU at idle.
-  - Next: spotifyd, shairport-sync, firewall, measurements.
+  - **Spotify Connect, librespot-based clients: blocked.** spotifyd 0.4.2 (and per reports
+    librespot 0.7/0.8 and go-librespot) get `audio key error 0 1`: since about Nov 2025 Spotify
+    refuses the legacy AES audio-key request on a growing set of accounts, in favor of its newer
+    PlayPlay DRM, which open-source clients don't implement (librespot #1649,
+    go-librespot #279/#317). Bitrate doesn't matter.
+  - **Spotify Soloist** (Spotify's official headless Connect client, `soloist`) instead: a glibc
+    ARMv7 binary (needs glibc >= 2.38; links libc/libm/libpthread/libdl/librt/libatomic, and
+    dlopens libpipewire-0.3 or libpulse). gcompat is too old (missing `__isoc23_*`,
+    `__fcntl_time64`, ...). Works with a **Debian trixie glibc runtime squashfs** (2.4 MB:
+    glibc 2.41, libpipewire 1.4.2 client, client modules, SPA support/audioconvert; built by
+    `scripts/build-soloist-runtime.sh`), run as `<rt>/lib/ld-linux-armhf.so.3 --library-path
+    <rt>/lib soloist`. `--version` OK on the board. Constraints: a personal API key from the
+    Spotify for Developers dashboard (Premium); **builds expire after 90 days** (exit code 10),
+    so the device must re-download periodically; **no redistribution**, so the device downloads
+    from soloist-builds.spotifycdn.com itself and the binary is never in git or images.
+  - Next: Soloist playback test (needs the user's API key), then a service plus auto-update;
+    shairport-sync, firewall, measurements.
 
 ### Project layout
 

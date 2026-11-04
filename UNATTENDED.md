@@ -233,3 +233,10 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   still held after 5 s -> reset; released -> normal boot. Tested the not-held path (1.35 s,
   with the factory overlay moved away as a safety net). Not tested with the button pressed.
 - Web page: Settings > "Factory reset..." (pre-check, two confirmation dialogs).
+
+### Task 6: boot cleanup (done)
+
+- Login consoles only on the serial console: tty1-6 gettys commented out in `/etc/inittab`
+  (no display on the board), applied live with `kill -HUP 1`.
+- `rc_parallel="YES"`: default runlevel done 40 s after kernel start instead of 48 s; all 22
+  services start (2 reboots tested). Services are already minimal (each one is used).

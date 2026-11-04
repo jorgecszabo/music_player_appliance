@@ -348,6 +348,16 @@ WATCHDOG_DEV="${WATCHDOG_DEV:-/dev/watchdog}"
 WATCHDOG_OPTS="-T 60 -t 10"
 EOF
 
+# --- Boot: console logins only on the serial console (no display on the board) ----
+if grep -qE "^tty[1-6]::respawn" /etc/inittab; then
+	log "disabling the tty1-6 consoles (serial console only)"
+	sed -i -E "s/^(tty[1-6]::respawn)/#\1/" /etc/inittab
+	kill -HUP 1
+fi
+
+# Start services in parallel (dependencies are declared in every init script).
+grep -q '^rc_parallel="YES"' /etc/rc.conf || sed -i 's/^#\?rc_parallel=.*/rc_parallel="YES"/' /etc/rc.conf
+
 # --- Services -------------------------------------------------------------------
 rc-update add panda-firewall boot >/dev/null 2>&1 || true
 rc-update add panda-reset-button boot >/dev/null 2>&1 || true

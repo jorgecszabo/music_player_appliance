@@ -234,7 +234,7 @@ class App:
     async def save(self, why):
         async with self.save_lock:
             log("saving with lbu:", why)
-            proc = await asyncio.create_subprocess_exec("lbu", "commit")
+            proc = await asyncio.create_subprocess_exec("flock", "/run/panda/media.lock", "lbu", "commit")
             if await proc.wait() != 0:
                 log("ERROR: lbu commit failed")
 

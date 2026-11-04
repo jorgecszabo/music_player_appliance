@@ -1,0 +1,45 @@
+# The appliance itself: appliance/rootfs (services, daemons, web page, setup),
+# plus a dependency on every package the appliance uses (appliance/packages.list),
+# so the device's world is just "panda-appliance panda-board-<board>".
+# panda-board-<board> subpackages carry boards/<board>/board.conf.
+#
+# Packaged (instead of shipped in the lbu overlay) so that the overlay holds
+# settings only and an OTA update can replace the code: at boot, files in the
+# overlay win over package files (apk --overlay-from-stdin --clean-protected).
+#
+# Built from the project tree mounted at /work (scripts/build-appliance.sh),
+# not from a source tarball. The version comes from build/panda-appliance.version
+# (written by scripts/build-appliance.sh: a UTC timestamp, so newer builds win).
+pkgname=panda-appliance
+_src=/work
+pkgver=$(cut -d" " -f1 "$_src"/build/panda-appliance.version 2>/dev/null || echo 0)
+pkgrel=0
+pkgdesc="Network audio appliance (Spotify, AirPlay, Bluetooth, radio): services and web page"
+url="https://localhost/panda"
+arch="noarch"
+license="custom"
+depends="$(sed 's/#.*//' "$_src"/appliance/packages.list | tr -s ' \t\n' ' ')"
+_boards="$(for d in "$_src"/boards/*/; do b=${d%/}; b=${b##*/}; [ "$b" = _template ] || echo "$b"; done)"
+subpackages="$(for b in $_boards; do printf 'panda-board-%s:_board ' "$b"; done)"
+source=""
+options="!check !strip"
+
+package() {
+	mkdir -p "$pkgdir"
+	tar -C "$_src"/appliance/rootfs --exclude=__pycache__ --exclude="*.pyc" -cf - etc | tar -C "$pkgdir" -xf -
+	# setup.sh's old one-shot role is gone; panda-setup runs it at every boot.
+	install -Dm644 "$_src"/build/panda-appliance.version "$pkgdir"/etc/panda/version
+	# Public keys that may sign OTA bundles (scripts/build-ota.sh signs with the abuild key).
+	install -d "$pkgdir"/etc/panda/ota-keys
+	install -m644 "$_src"/keys/*.rsa.pub "$pkgdir"/etc/panda/ota-keys/
+	chmod 0600 "$pkgdir"/etc/doas.d/*.conf
+	chown -R root:root "$pkgdir"
+}
+
+_board() {
+	local b="${subpkgname#panda-board-}"
+	pkgdesc="Board description for the panda appliance: $b"
+	# Board-only packages (board.conf BOARD_PACKAGES).
+	depends="$pkgname $(. "$_src"/boards/"$b"/board.conf; echo "${BOARD_PACKAGES:-}")"
+	install -Dm644 "$_src"/boards/"$b"/board.conf "$subpkgdir"/etc/panda/board.conf
+}

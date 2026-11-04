@@ -1,0 +1,10 @@
++var/lib/bluetooth
++var/lib/panda-web/radio-favorites.json
+-etc/pipewire/pipewire.conf.d/10-panda.conf
+-etc/pipewire/pipewire.conf.d/20-panda-tone.conf
+-etc/wireplumber/wireplumber.conf.d/10-panda.conf
+-etc/shairport-sync.conf
+-etc/bluetooth/main.conf
+-etc/conf.d/watchdog
+-etc/modprobe.d/panda-radio.conf
+-etc/apk/repositories

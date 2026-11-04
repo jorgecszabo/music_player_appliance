@@ -7,8 +7,9 @@
 #   factory-reset.sh            do it (asks nothing; callers confirm first)
 #   factory-reset.sh --dry-run  only print what would happen
 #
-# The factory overlay lives on the boot media at factory/<hostname>.apkovl.tar.gz
-# (written there by the image build / deploy). Without it, nothing is done:
+# The factory overlay: the booted OTA slot's (slots/<x>/factory.apkovl.tar.gz,
+# from that version's image), else factory/<hostname>.apkovl.tar.gz (written by
+# the image build). The installed version stays: only the settings are reset. Without it, nothing is done:
 # deleting the overlay alone would boot a bare system with no network or SSH.
 set -eu
 . /etc/panda/board.conf
@@ -17,7 +18,9 @@ DRY=""
 [ "${1:-}" = "--dry-run" ] && DRY=1
 
 media=/media/"$BOOT_MEDIA"
-factory=$media/factory/"$HOSTNAME".apkovl.tar.gz
+slot=$(cat /run/panda/slot 2>/dev/null || true)
+factory=$media/slots/$slot/factory.apkovl.tar.gz
+[ -n "$slot" ] && [ -s "$factory" ] || factory=$media/factory/"$HOSTNAME".apkovl.tar.gz
 log() { echo "factory-reset: $*"; logger -t factory-reset "$*" 2>/dev/null || true; }
 
 [ -s "$factory" ] || { log "no factory overlay at $factory: not resetting"; exit 1; }
@@ -31,6 +34,10 @@ if [ -n "$DRY" ]; then
 fi
 
 log "resetting to factory settings"
+# Nothing else writes the card from here on (OTA installs, lbu commits).
+mkdir -p /run/panda
+exec 9>>/run/panda/media.lock
+flock 9
 /etc/panda/chime.sh forgot-all --wait 2>/dev/null || true
 mount -o remount,rw "$media"
 cp "$factory" "$media/$HOSTNAME.apkovl.tar.gz.new"

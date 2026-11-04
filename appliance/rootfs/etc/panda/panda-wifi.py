@@ -371,7 +371,7 @@ class Wifi:
             write_conf(self.conf)
         with self.save_lock:
             log("saving with lbu:", why)
-            if not sh("lbu", "commit", timeout=120):
+            if not sh("flock", "/run/panda/media.lock", "lbu", "commit", timeout=600):
                 log("ERROR: lbu commit failed")
 
     def import_boot_media(self):
@@ -393,13 +393,11 @@ class Wifi:
         log(f"imported {len(nets)} network(s) from {path}")
         self.save("imported wifi.json from the boot partition")
         # Don't leave the password on the card.
-        if sh("mount", "-o", "remount,rw", media):
-            try:
-                os.unlink(path)
-            except OSError as e:
-                log("couldn't delete", path, e)
-            os.sync()
-            sh("mount", "-o", "remount,ro", media)
+        # (Under the boot-media lock: an OTA install may be writing the card.)
+        if sh("flock", "/run/panda/media.lock", "sh", "-c",
+              'mount -o remount,rw "$1" && rm -f "$1"/wifi.json; sync; mount -o remount,ro "$1"',
+              "-", media, timeout=600):
+            log("deleted", path)
 
     # --- adapter selection / process supervision ----------------------------------------
     def choose(self):

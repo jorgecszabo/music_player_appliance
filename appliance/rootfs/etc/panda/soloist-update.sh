@@ -80,7 +80,17 @@ build_age_days() {
 # Run a command with the boot media read-write. Going back to read-only can
 # fail for a moment ("busy") while something has a replaced file open (the
 # arbiter's "soloist ctl"), so retry; a card left read-write is an error.
+# Under the boot-media lock (an OTA install or an lbu commit may be writing).
 with_media_rw() {
+	mkdir -p /run/panda
+	exec 9>>/run/panda/media.lock
+	flock 9
+	_with_media_rw "$@"; r=$?
+	flock -u 9
+	exec 9>&-
+	return $r
+}
+_with_media_rw() {
 	mount -o remount,rw "$MEDIA" || { log "ERROR: can't remount $MEDIA read-write"; return 1; }
 	rc=0; "$@" || rc=1
 	sync

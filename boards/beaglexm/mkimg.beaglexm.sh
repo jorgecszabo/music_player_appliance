@@ -49,7 +49,8 @@ profile_beaglexm() {
 	beaglexm_extlinux=yes
 	# U-Boot + extlinux boot; no GRUB/EFI (profile_base enables it for ARM).
 	grub_mod=
-	apks="$(sed 's/#.*//' "$HOME"/.mkimage/packages.list) $BOARD_PACKAGES"
+	# The appliance (panda-appliance depends on packages.list) and its board.
+	apks="$(sed 's/#.*//' "$HOME"/.mkimage/packages.list) $BOARD_PACKAGES panda-appliance panda-board-$BOARD"
 	apkovl="genapkovl.sh"
 	hostname="$HOSTNAME"
 }

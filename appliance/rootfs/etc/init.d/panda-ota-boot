@@ -1,0 +1,18 @@
+#!/sbin/openrc-run
+# OTA, early in boot (/etc/panda/panda-ota.py boot): on a trial boot of a newly
+# installed slot, point the bootloader back at the confirmed slot first, so a
+# crash or a failed health check returns to the old version; after a failed
+# trial, restore the settings from before the update.
+
+description="OTA update slots: arm the rollback on a trial boot"
+
+depend() {
+	need localmount
+	before panda-setup panda-firewall
+}
+
+start() {
+	ebegin "Checking the update slots"
+	python3 /etc/panda/panda-ota.py boot
+	eend 0
+}

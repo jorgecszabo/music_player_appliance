@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+# Make the running system match the installed panda-appliance version at every
+# boot: generated configs, service users, setting defaults, enabled services
+# (/etc/panda/setup.sh --boot). Offline; installs nothing.
+
+description="Set up the appliance (configs, users, services)"
+
+depend() {
+	need localmount
+	after panda-ota-boot bootmisc
+	before speaker-pipewire speaker-wireplumber speaker-shairport speaker-soloist \
+		speaker-radio speaker-arbiter panda-audio-init panda-bt panda-wifi panda-web \
+		bluetooth watchdog
+}
+
+start() {
+	ebegin "Setting up the appliance"
+	sh /etc/panda/setup.sh --boot >/var/log/panda-setup.log 2>&1
+	eend $? "panda-setup failed, see /var/log/panda-setup.log"
+}

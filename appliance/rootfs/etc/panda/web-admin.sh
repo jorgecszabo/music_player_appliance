@@ -54,7 +54,7 @@ reboot)
 	logger -t panda-web "reboot requested from the web page"
 	bg sh -c 'sleep 1; reboot' ;;
 save)
-	lbu commit && echo saved ;;
+	flock /run/panda/media.lock lbu commit && echo saved ;;
 lbu-status)
 	lbu status 2>&1 || true ;;
 chrony)
@@ -98,7 +98,7 @@ set-soloist-key)
 	( umask 077; printf '%s\n' "$key" > "$f.new" ) && chown root:root "$f.new" && mv "$f.new" "$f"
 	unset key
 	logger -t panda-web "Spotify API key replaced from the web page"
-	lbu commit
+	flock /run/panda/media.lock lbu commit
 	rc-service speaker-soloist restart >/dev/null 2>&1 || true
 	sleep 6
 	if rc-service speaker-soloist status >/dev/null 2>&1; then echo running; else echo "not running"; fi ;;

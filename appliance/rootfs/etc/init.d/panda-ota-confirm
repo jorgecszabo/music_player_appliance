@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+# OTA: after a trial boot, wait for the appliance to come up healthy and keep
+# the new slot; unhealthy for 5 minutes -> reboot into the previous version
+# (/etc/panda/panda-ota.py confirm). Runs in the background; does nothing
+# outside a trial.
+
+description="OTA update slots: confirm a trial boot"
+
+depend() {
+	after panda-web sshd speaker-pipewire speaker-wireplumber
+}
+
+start() {
+	ebegin "Starting the update health check"
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile /run/panda-ota-confirm.pid \
+		--exec /usr/bin/python3 -- /etc/panda/panda-ota.py confirm
+	eend $?
+}
+
+stop() {
+	start-stop-daemon --stop --quiet --pidfile /run/panda-ota-confirm.pid 2>/dev/null
+	return 0
+}

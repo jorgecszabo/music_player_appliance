@@ -127,13 +127,12 @@ monitor.bluez.properties = {
 # Receive side (phone -> us): a fixed jitter buffer. The automatic one starts at
 # about one quantum and only grows after it has seen a delay spike (forgetting
 # it after 2 min), so the BT 2.1 controller's bursty packet timing caused
-# occasional skips, and this apartment's 2.4 GHz band is crowded. 16384 samples =
-# about 370 ms at 44.1 kHz: fine for music,
+# occasional skips. 8192 samples = about 186 ms at 44.1 kHz: fine for music,
 # but video on the phone lags by that much.
 monitor.bluez.rules = [
   {
     matches = [ { node.name = "~bluez_input.*" } ]
-    actions = { update-props = { bluez5.decode-buffer.latency = 16384 } }
+    actions = { update-props = { bluez5.decode-buffer.latency = 8192 } }
   }
 ]
 

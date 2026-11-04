@@ -265,3 +265,20 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   forced underrun while the link keeps running (details in PLAN.md's side quest). The patch
   (DAI trigger that stops/mutes the link) needs a kernel build + boot test: left for a
   supervised session.
+
+### Task 9: platform-specific vs generic (done; done before the image so it ships)
+
+- `appliance/rootfs/etc/panda/gen-configs.sh` renders every board-dependent config (PipeWire,
+  tone filter, WirePlumber, shairport-sync, bluez, watchdog) from `CONF_DIR` into `ROOT`, so it
+  runs on the build host too. setup.sh calls it. Regression check: the PandaBoard render is
+  identical to the configs that were live on the board (only comments moved), and after the
+  deploy the board's files are byte-identical to the host render.
+- Board quirks moved into board.conf: `AUDIO_QUANTUM/_MIN/_MAX`, `AUDIO_OUTPUT_PROPS` (the
+  TWL6040 never-idle + IRQ-scheduling block), `BT_CONTROLLER_MODE`, `BT_RX_BUFFER`,
+  `WATCHDOG_TIMEOUT`, web branding `BOARD_BLURB`/`BOARD_BADGE`. Generic defaults otherwise.
+- `boards/_template/` (documented board.conf, mkimage profile, card writer stub, aports note)
+  and a "Porting the appliance to another board" section in README.md with a test checklist.
+- Dry run for an aarch64 template board.conf: configs render with generic defaults (44.1/48 kHz,
+  quantum 1024, dual-mode BT, tone filter -> its USB DAC node). Soloist builds exist for
+  arm32/arm64/x86_64; the glibc runtime builder maps all three. The web page hides "Max volume"
+  without a hardware gain control. Python config parsing handles trailing comments now.

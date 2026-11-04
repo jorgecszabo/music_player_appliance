@@ -78,8 +78,11 @@ def shell_conf(path):
         m = re.match(r'^([A-Z_][A-Z0-9_]*)=(.*)$', line)
         if m:
             v = m.group(2).strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-                v = v[1:-1]
+            q = re.match(r'^(["\'])(.*?)\1', v)          # quoted (single line)
+            if q:
+                v = q.group(2)
+            else:
+                v = re.split(r'\s+#', v, 1)[0].strip()   # unquoted; drop "# comment"
             out[m.group(1)] = v
     return out
 
@@ -103,7 +106,7 @@ def bt_call(req, timeout=5):
 
 # --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
 RADIO_DNS = "all.api.radio-browser.info"
-RADIO_UA = "PandaSpeaker/1.0 (PandaBoard Alpine speaker; panda-web)"
+RADIO_UA = "PandaSpeaker/1.0 (Alpine Linux audio appliance; panda-web)"
 MPV_SOCK = "/run/speaker/radio.sock"
 FAVORITES = "/var/lib/panda-web/radio-favorites.json"
 STATION_FIELDS = ("stationuuid", "name", "codec", "bitrate", "countrycode", "tags", "votes",
@@ -340,6 +343,9 @@ class Collector:
             "hostname": socket.gethostname(),
             "speaker_name": app.get("SPEAKER_NAME", ""),
             "board": board.get("BOARD", ""),
+            "board_name": board.get("BOARD_NAME", ""),
+            "board_blurb": board.get("BOARD_BLURB", ""),
+            "board_badge": board.get("BOARD_BADGE", ""),
             "bt_controller": board.get("BT_DESCRIPTION", ""),
             "kernel": os.uname().release,
             "alpine": read("/etc/alpine-release").strip(),

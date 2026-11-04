@@ -29,3 +29,38 @@ Other boards: `BOARD=<name>` selects `boards/<name>/`. That directory needs a
 `scripts/serial-sysrq.py [keys]` sends Magic SysRq over the serial console and
 saves the output to `build/serial-sysrq.log` (`w` blocked tasks, `l` CPUs,
 `t` all tasks). Quit picocom first, and don't run it with sudo.
+
+## Porting the appliance to another board
+
+Everything board-specific lives in `boards/<board>/`. The appliance itself
+(`appliance/`: services, setup, web page) reads every hardware detail from that
+board's `board.conf`, installed on the device as `/etc/panda/board.conf`.
+
+| Generic (`appliance/`, `aports/`, `scripts/`) | Per board (`boards/<board>/`) |
+|---|---|
+| services, setup.sh, gen-configs.sh, web page, chimes, firewall, reset | `board.conf`: arch, kernel, DTB, console, boot media, audio card/rate/quirks, volume cap control, BT controller, button, LEDs, watchdog, thermal zone |
+| PipeWire/WirePlumber/bluez/shairport configs (rendered from board.conf) | `mkimg.<board>.sh`: mkimage profile (bootloader config, kernel cmdline) |
+| our packages (`aports/shairport-sync`) | `write-sdcard.sh`: partitioning + bootloader install for the board's ROM |
+| build scripts (container platform from `ALPINE_ARCH`) | `aports/linux-<board>/` (optional): own kernel + config fragment; `u-boot/` (optional) |
+
+Steps:
+
+1. `cp -r boards/_template boards/<board>` and rename `mkimg.TEMPLATE.sh` to
+   `mkimg.<board>.sh` (and its functions `TEMPLATE_*` to `<board>_*`).
+2. Fill in `board.conf`; every variable is documented there. Optional ones fall back to
+   generic defaults (44.1/48 kHz, quantum 1024, no codec quirks, dual-mode BT, 60 s watchdog).
+3. Check the rendered configs on the host, without hardware:
+   `mkdir -p /tmp/c && cp boards/<board>/board.conf appliance/appliance.conf /tmp/c/ &&
+   CONF_DIR=/tmp/c ROOT=/tmp/out sh appliance/rootfs/etc/panda/gen-configs.sh`
+4. Kernel: use an Alpine flavor if it supports the board, or add `aports/linux-<board>`.
+   Needs: the audio codec, the watchdog, the BT controller (or `btusb`), gpio-keys for the
+   button, `nf_tables`, and a fast entropy source (getrandom must not block at boot).
+5. Write `write-sdcard.sh` for the board's boot ROM, then
+   `BOARD=<board> scripts/build-package.sh <kernel> && BOARD=<board> scripts/build-image.sh`.
+6. On the device, find the real names and put them in board.conf: `cat /proc/asound/cards`
+   (AUDIO_CARD), `wpctl status` (AUDIO_PW_SINK), `amixer` (AUDIO_HW_VOLUME_*),
+   `cat /proc/bus/input/devices` (BUTTON_*), `ls /sys/class/leds /sys/class/watchdog`.
+7. Test checklist: boot to SSH; power-cut (pull the plug, settings survive); audio
+   (a quiet tone, then music: no crackle, `pw-top` shows 0 errors); AirPlay; Spotify;
+   Bluetooth pairing via the button + reconnect after reboot; radio; web page; watchdog
+   (`kill -STOP` the busybox watchdog: the board resets); factory reset dry run.

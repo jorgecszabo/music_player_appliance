@@ -41,9 +41,9 @@ def log(*a):
 def soloist_bin():
     board = {}
     for line in open("/etc/panda/board.conf"):
-        m = re.match(r"^([A-Z_]+)=(.*)$", line.strip())
+        m = re.match(r"^([A-Z_]+)=\"?([^\"#\s]*)", line.strip())
         if m:
-            board[m.group(1)] = m.group(2).strip('"')
+            board[m.group(1)] = m.group(2)
     return f"/media/{board.get('BOOT_MEDIA', 'mmcblk0p1')}/soloist/soloist"
 
 

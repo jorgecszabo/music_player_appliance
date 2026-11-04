@@ -6,8 +6,9 @@
 # Graph per channel: preamp (headroom) -> bass low shelf -> treble high shelf.
 # Headroom = 3 dB (resampler intersample overs, measured on AirPlay) plus any
 # bass/treble boost, so boosting can't clip.
-. /etc/panda/board.conf
-. /etc/panda/audio.conf
+CONF_DIR="${CONF_DIR:-/etc/panda}"
+. "$CONF_DIR"/board.conf
+[ -f "$CONF_DIR"/audio.conf ] && . "$CONF_DIR"/audio.conf
 mult=$(awk -v b="${BASS_DB:-0}" -v t="${TREBLE_DB:-0}" 'BEGIN {
 	m = b; if (t > m) m = t; if (m < 0) m = 0
 	printf "%.6f", 10 ^ (-(3 + m) / 20) }')

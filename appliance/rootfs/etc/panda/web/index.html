@@ -12,7 +12,7 @@
 
 <header class="banner">
   <h1 class="wordart" id="title">Panda Control Panel</h1>
-  <p class="tagline">~*~ Welcome to the home page of <b id="speaker-name">Panda</b>, an upcycled 2011 PandaBoard speaker ~*~</p>
+  <p class="tagline">~*~ Welcome to the home page of <b id="speaker-name">Panda</b>, <span id="board-blurb">an upcycled computer</span> turned speaker ~*~</p>
   <div class="ticker sunken"><div class="ticker-track"><span id="ticker">Loading... please wait while the page loads...</span></div></div>
 </header>
 
@@ -131,9 +131,9 @@
         <label for="tone-treble">Treble</label>
         <input type="range" id="tone-treble" min="-12" max="12" step="1">
         <span class="tone-val" id="tone-treble-val">0 dB</span>
-        <label for="tone-cap">Max volume</label>
-        <input type="range" id="tone-cap" min="0" max="15" step="1">
-        <span class="tone-val" id="tone-cap-val">0 dB</span>
+        <label for="tone-cap" class="cap-row">Max volume</label>
+        <input type="range" id="tone-cap" class="cap-row" min="0" max="15" step="1">
+        <span class="tone-val cap-row" id="tone-cap-val">0 dB</span>
       </div>
       <div class="button-row">
         <button class="btn" id="tone-reset" type="button">Flat</button>
@@ -257,7 +257,7 @@
   <div class="badges">
     <span class="badge b-alpine">ALPINE<b>LINUX</b></span>
     <span class="badge b-pw">PIPE<b>WIRE</b></span>
-    <span class="badge b-panda">OMAP4<b>INSIDE</b></span>
+    <span class="badge b-panda" id="board-badge"><span id="board-badge-text">CPU</span><b>INSIDE</b></span>
     <span class="badge b-upcycled">UPCYCLED<b>HARDWARE</b></span>
     <span class="badge b-vi">MADE WITH<b>vi</b></span>
     <span class="badge b-800">BEST VIEWED<b>800x600</b></span>

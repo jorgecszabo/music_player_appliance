@@ -83,6 +83,9 @@ function render(s) {
   if (s.error) { setText("live-text", s.error); return; }
   const name = s.host.speaker_name || "Panda";
   setText("speaker-name", name);
+  setText("board-blurb", s.host.board_blurb || `an upcycled ${s.host.board_name || "computer"}`);
+  setText("board-badge-text", s.host.board_badge || "");
+  $("board-badge").hidden = !s.host.board_badge;
   document.querySelectorAll(".sn").forEach((e) => { e.textContent = name; });
   document.title = `${name} Control Panel`;
   if (document.activeElement !== $("name-input") && !$("name-input").dataset.edited) {
@@ -224,6 +227,7 @@ function renderTone(s) {
   const t = s.tone;
   if (!t) return;
   $("tone-cap").max = t.cap_max;
+  document.querySelectorAll(".cap-row").forEach((e) => { e.hidden = !t.available; });
   for (const [id, v] of [["tone-bass", t.bass], ["tone-treble", t.treble], ["tone-cap", t.cap]]) {
     if (dragging.has(id) || toneTimer) continue;
     $(id).value = v;

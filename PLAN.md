@@ -9,7 +9,7 @@ read-only. Pulling the plug at any time is safe.
 
 Audio sources (all mixed by PipeWire on the board):
 
-- **Spotify Connect** (librespot / spotifyd)
+- **Spotify Connect** (Spotify Soloist; librespot/spotifyd are blocked, see Phase 4)
 - **AirPlay** (shairport-sync). Linux desktops with PipeWire can stream to this
   through PipeWire's RAOP sink.
 - **PipeWire/PulseAudio network sink** (pulse TCP or RTP/ROC), as an alternative
@@ -375,7 +375,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   container `localhost/panda-alpine-build:3.24` (`scripts/build-container.sh`,
   run with `scripts/alpine.sh`); abuild signing key in `keys/`
   (the private key is gitignored, so back it up); host cross gcc 16.2 checked.
-  Still to do: re-login for `dialout`, and connect the serial adapter.
+  Serial console (`dialout`, USB adapter) in use since Phase 3.
 - [x] **Phase 1** (2026-11-03): U-Boot v2024.07 builds with the host cross gcc
   (`boards/pandaboard/u-boot/build.sh`; `TOOLS_LIBCRYPTO` disabled because Fedora lacks the
   OpenSSL ENGINE headers). Default env: `findfdt` sets `omap4-panda.dtb`,
@@ -454,7 +454,8 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   board-selectable scripts (`BOARD=`), container arch from `ALPINE_ARCH`. Verified: the rebuilt
   image is identical apart from the intended overlay changes (`/etc/panda/*.conf`, first-boot
   script reading them). Both conf files were installed on the live board and committed.
-- [~] **Phase 4** (2026-11-03): audio.
+- [x] **Phase 4** (2026-11-03/04): audio (Spotify Connect, AirPlay; the network sink is open,
+  see "Still to do").
   - Deploy model: `appliance/rootfs/` (files under /etc) + `/etc/panda/setup.sh` (idempotent:
     repos, packages, eudev, users, generated configs, services, lbu), pushed by
     `scripts/deploy.sh [--restart]`.
@@ -518,9 +519,8 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - **Reboot test passed** (clean reboot, after the accidental power cut): all services up,
     volume 1.0, firewall loaded. Idle: 37 MB used (plus 232 MB tmpfs/shared), 63.5 C,
     about 0-1% CPU besides PipeWire's feed.
-  - Image integration is deferred until Phases 5-6 are done, so the image is built once
-    (rootfs + setup.sh at first boot, packages in the apk cache, Soloist runtime on the card,
-    kernel r2). A fresh card should then need only the Soloist API key.
+  - Image integration was deferred until Phases 5-6 were done; done 2026-11-04 (see "Image"
+    below).
 - [x] **Phase 5** (2026-11-04): Bluetooth speaker.
   - Onboard WL1271 is enough: fixed public address 64:9C:8E:AE:00:1F, BR/EDR only.
   - WirePlumber `hardware.bluetooth = required` (`optional` means "only if something wants
@@ -547,6 +547,57 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     `btusb` + its firmware in the modloop, disable the onboard controller).
   - **Power-cut test passed:** after pulling the plug the pairing loaded from the overlay, same
     controller address, and panda-bt reconnected to the phone by itself.
+- [x] **Phase 6 + appliance features** (2026-11-04; details in UNATTENDED.md tasks 1-9):
+  - Chimes (synthesized bell tones) for boot and Bluetooth events; heartbeat LED.
+  - Web control panel `panda-web` (`http://panda.local/`): status, volume/tone/cap, now
+    playing, Radio Tuner, Network Connections, Spotify API key (write-only), factory reset.
+  - Tone filter `panda-eq` (bass/treble, -3 dB headroom), volume cap = codec hardware gain,
+    software volume only. AirPlay: own shairport-sync aport with the native PipeWire backend.
+  - Last source wins (`speaker-arbiter`): tested AirPlay vs a local stream and AirPlay vs radio.
+  - Internet radio (`speaker-radio`, mpv + radio-browser.info): search, favorites, paging.
+  - Now playing: AirPlay metadata, radio ICY titles, Bluetooth AVRCP, Spotify via `soloist ctl`.
+  - Factory reset: S2 held at power-on, or the web page; restores `<boot>/factory/` overlay.
+  - Hardware watchdog (tested: reset after 58 s), panic/oops reboot, serial-only gettys,
+    `rc_parallel` (boot 48 s -> 40 s). `lbu commit` already remounts the card rw/ro itself,
+    so no separate helper.
+  - Portability: `gen-configs.sh` renders every board-dependent config from board.conf (also
+    on the build host); `boards/_template/`; porting guide in README.md.
+- [x] **Image** (2026-11-04, UNATTENDED.md task 7): kernel r3, `build/sdimage/` (171 MB, 281
+  packages, full appliance overlay, first-boot script runs setup.sh offline and reboots,
+  `factory/` overlay, Soloist runtime, chimes). No Soloist binary (the device downloads it) and
+  no API key (entered on the web page). **Built but never written to a card or booted.**
+- [~] **Wi-Fi** (2026-11-04, see "Wi-Fi" above): kernel r4, `panda-wifi`, Network window, the
+  WL1271 Wi-Fi-before-BT power order (verified). Connect retries for 3 min (nudges
+  wpa_supplicant every 10 s). **Onboard Wi-Fi doesn't connect yet:** the router (`alf`, ch 6)
+  is heard at -55 dBm but never ACKs our auth frames (mac80211 retries 12-25 ms apart, "timed
+  out"), once authenticated and then lost every association frame; wpa_supplicant's own scans
+  often miss channel 6 entirely. Suspected: Bluetooth coexistence on the shared antenna (the
+  phone was connected), or weak TX from the uncalibrated default NVS. Not the password, not
+  congestion (9 weak neighbors, -71 to -82 dBm).
+
+### Still to do
+
+Next:
+1. **Test the image on a spare card** (`write-sdcard.sh`, keep the current card as it is):
+   first boot runs setup and reboots; then the README test checklist (power cut, audio,
+   AirPlay, Spotify, BT pairing + reconnect, radio, web page, watchdog, factory reset dry run).
+   Then rebuild with kernel r4 + the Wi-Fi work: the built image predates both.
+2. **Onboard Wi-Fi:** connect with the phone's Bluetooth off (tests coexistence), then close to
+   the router (tests TX power); try a USB adapter. If coexistence: pause BT/page scan while
+   connecting, or prefer USB. If TX: a calibrated NVS (`calibrator`) or give up on the WL1271.
+3. **Untested paths that need the phone/app:** Spotify pause by the arbiter, Bluetooth AVRCP
+   pause by the arbiter, Spotify now-playing fields (Soloist must be logged in again).
+4. **Factory reset for real** (only the not-held path and the dry run are tested).
+
+Later:
+- **BT 5.x USB dongle** for the remaining A2DP glitches (`btusb` + firmware in the modloop,
+  onboard controller disabled); it also frees the WL1271 antenna for Wi-Fi.
+- **PipeWire/Pulse network sink** for Linux hosts (Phase 4 goal; AirPlay covers it for now).
+- **McPDM driver fix** (side quest): DAI `trigger` patch, kernel build + boot test, upstream.
+- Wlcore firmware-crash recovery power-cycles Wi-Fi and takes BT down: watch for it.
+- Upstream notes: Alpine shairport-sync configure flags; PipeWire 1.6.8 raop-sink iov bug.
+- Kernel cleanup: OMAP remoteproc (120 MB CMA) and the omap4-keypad probe error.
+- Spotify Soloist builds expire after 90 days: confirm the weekly update job renews it.
 
 ### Project layout
 
@@ -565,12 +616,15 @@ appliance/                 board-independent
   packages.list            packages for the card's local repository
   genapkovl.sh             first-boot overlay (users, SSH, doas, lbu, services)
   authorized_keys          admin SSH keys, generated from ~/.ssh/*.pub (gitignored)
-aports/<pkg>/              generic packages (none yet)
+  rootfs/etc/               overlay files: init.d services (panda-*, speaker-*), panda/
+                           (daemons, setup.sh, gen-configs.sh, firewall, reset, web/)
+aports/<pkg>/              generic packages (shairport-sync with the native PipeWire backend)
 container/                 Containerfile (target-arch abuild/mkimage env),
                            Containerfile.cross (x86_64 + arm-none-eabi-gcc)
 scripts/                   env.sh (BOARD selection), alpine.sh, build-container.sh,
                            setup-keys.sh, build-package.sh, build-image.sh,
-                           update-boot-files.sh, serial-sysrq.py
+                           update-boot-files.sh, deploy.sh (push rootfs + run setup.sh),
+                           build-soloist-runtime.sh (glibc runtime squashfs), serial-sysrq.py
 build/, packages/          outputs (gitignored)
 keys/                      abuild keys (private key gitignored)
 ```

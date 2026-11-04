@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panda Control Panel</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<!-- Best viewed in 800x600 with Netscape Navigator 4.0 or higher. Made with Notepad. -->
+
+<header class="banner">
+  <h1 class="wordart" id="title">Panda Control Panel</h1>
+  <p class="tagline">~*~ Welcome to the home page of <b id="speaker-name">Panda</b>, an upcycled 2011 PandaBoard speaker ~*~</p>
+  <div class="ticker sunken"><div class="ticker-track"><span id="ticker">Loading... please wait while the page loads...</span></div></div>
+</header>
+
+<div class="layout">
+
+<nav class="window sidebar" aria-label="Navigation">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9776;</span><span class="title-text">Navigation</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <ul class="nav">
+      <li><a href="#now-playing">Now Playing</a></li>
+      <li><a href="#volume">Volume</a></li>
+      <li><a href="#bluetooth">Bluetooth</a> <span class="new">NEW!</span></li>
+      <li><a href="#system">System</a></li>
+      <li><a href="#services">Services</a></li>
+      <li><a href="#logs">Logs</a></li>
+      <li><a href="#settings">Settings</a></li>
+    </ul>
+    <hr>
+    <div class="counter-box">
+      <div class="small">You are visitor number</div>
+      <div class="odometer" id="hits">000000</div>
+      <div class="small">since the last reboot!</div>
+    </div>
+    <hr>
+    <div class="link-status small"><span class="led" id="live-led"></span> <span id="live-text">Connecting...</span></div>
+    <hr>
+    <p class="small center">Sign my guestbook!<br><span class="construction-mini">UNDER CONSTRUCTION</span></p>
+  </div>
+</nav>
+
+<main>
+
+<section class="window" id="now-playing">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9835;</span><span class="title-text">Now Playing - Panda Amp</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <div class="lcd">
+      <div class="lcd-row">
+        <span class="lcd-state" id="lcd-state">&#9632;</span>
+        <span class="lcd-time" id="lcd-time">--:--</span>
+        <div class="lcd-title-box"><div class="lcd-title" id="lcd-title">*** PANDA AMP *** IDLE ***</div></div>
+      </div>
+      <div class="lcd-row lcd-small">
+        <span class="lcd-tag" id="lcd-codec">---</span>
+        <span class="lcd-tag" id="lcd-rate">-- kHz</span>
+        <span class="lcd-tag" id="lcd-out">OUT 96 kHz</span>
+        <span class="lcd-tag" id="lcd-chan">STEREO</span>
+        <span class="lcd-tag lcd-source" id="lcd-source">NO SOURCE</span>
+      </div>
+    </div>
+    <table class="grid" id="streams">
+      <thead><tr><th>Source</th><th>Format</th><th>State</th><th>Xruns</th></tr></thead>
+      <tbody><tr><td colspan="4" class="center">Nothing is playing. Pick &quot;<span class="sn">Panda</span>&quot; in Spotify, AirPlay or Bluetooth.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="window" id="volume">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128264;</span><span class="title-text">Volume Control</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <div class="mixer" id="mixer">
+      <div class="channel" id="master-channel">
+        <div class="channel-name">Master</div>
+        <input type="range" class="vslider" id="master-vol" min="0" max="100" step="1" aria-label="Master volume">
+        <div class="channel-value" id="master-val">--%</div>
+        <label class="check"><input type="checkbox" id="master-mute"> Mute</label>
+      </div>
+    </div>
+    <p class="small">Each source also has its own volume (the phone or app controls it too). The board's hardware gain is the ceiling.</p>
+    <fieldset class="group">
+      <legend>Tone &amp; volume cap</legend>
+      <div class="construction"><span>UNDER CONSTRUCTION</span></div>
+      <p class="small center">Bass, treble and the maximum volume are coming soon. Check back later!</p>
+    </fieldset>
+  </div>
+</section>
+
+<section class="window" id="bluetooth">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9993;</span><span class="title-text">Bluetooth</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <div class="pair-row">
+      <button class="btn btn-big" id="pair-btn" type="button">Start pairing</button>
+      <div>
+        <div id="pair-text">The speaker is hidden. Press the button (or S2 on the board) to let a new phone pair for 2 minutes.</div>
+        <div class="progress sunken" id="pair-progress" hidden><div class="progress-fill" id="pair-fill"></div></div>
+      </div>
+    </div>
+    <table class="grid" id="bt-devices">
+      <thead><tr><th>Device</th><th class="hide-narrow">Address</th><th>Status</th><th></th></tr></thead>
+      <tbody><tr><td colspan="4" class="center">No paired devices.</td></tr></tbody>
+    </table>
+    <div class="track" id="bt-track" hidden></div>
+    <div class="button-row">
+      <button class="btn" id="forget-all" type="button">Forget all devices...</button>
+    </div>
+  </div>
+</section>
+
+<section class="window" id="system">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128187;</span><span class="title-text">System Properties</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <table class="props">
+      <tr><th>Board</th><td id="sys-board">-</td></tr>
+      <tr><th>Operating system</th><td id="sys-os">-</td></tr>
+      <tr><th>Uptime</th><td id="sys-uptime">-</td></tr>
+      <tr><th>CPU usage</th><td><div class="progress sunken"><div class="progress-fill" id="cpu-fill"></div></div><span id="sys-cpu">-</span></td></tr>
+      <tr><th>Memory</th><td><div class="progress sunken"><div class="progress-fill" id="mem-fill"></div></div><span id="sys-mem">-</span></td></tr>
+      <tr><th>Temperature</th><td id="sys-temp">-</td></tr>
+      <tr><th>Audio output</th><td id="sys-audio">-</td></tr>
+      <tr><th>Network</th><td id="sys-net">-</td></tr>
+      <tr><th>Time sync</th><td id="sys-sync">-</td></tr>
+      <tr><th>Bluetooth</th><td id="sys-bt">-</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="window" id="services">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9881;</span><span class="title-text">Services</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <table class="grid" id="svc-table">
+      <thead><tr><th>Service</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="button-row">
+      <button class="btn" id="restart-audio" type="button">Restart audio stack</button>
+    </div>
+  </div>
+</section>
+
+<section class="window" id="logs">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128220;</span><span class="title-text">Log Viewer</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <div class="button-row left">
+      <label for="log-name">Log:</label>
+      <select id="log-name">
+        <option>soloist</option><option>shairport</option><option>panda-bt</option>
+        <option>pipewire</option><option>wireplumber</option><option>panda-web</option>
+        <option>panda-web-admin</option><option>messages</option>
+      </select>
+      <button class="btn" id="log-refresh" type="button">Refresh</button>
+    </div>
+    <pre class="console sunken" id="log-text">Pick a log and press Refresh.</pre>
+  </div>
+</section>
+
+<section class="window" id="settings">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128295;</span><span class="title-text">Settings</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <fieldset class="group">
+      <legend>Speaker name</legend>
+      <form id="name-form" class="button-row left">
+        <input type="text" class="field" id="name-input" maxlength="32" autocomplete="off" aria-label="Speaker name">
+        <button class="btn" type="submit">Apply</button>
+      </form>
+      <p class="small">Shown in Spotify, AirPlay and Bluetooth. Renaming restarts those services (about 30 s).</p>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Save &amp; power</legend>
+      <p id="lbu-text">Checking for unsaved changes...</p>
+      <div class="button-row left">
+        <button class="btn" id="save-btn" type="button">Save to card</button>
+        <button class="btn" id="reboot-btn" type="button">Reboot...</button>
+      </div>
+    </fieldset>
+  </div>
+</section>
+
+</main>
+</div>
+
+<footer class="footer">
+  <div class="badges">
+    <span class="badge b-alpine">ALPINE<b>LINUX</b></span>
+    <span class="badge b-pw">PIPE<b>WIRE</b></span>
+    <span class="badge b-panda">OMAP4<b>INSIDE</b></span>
+    <span class="badge b-upcycled">UPCYCLED<b>HARDWARE</b></span>
+    <span class="badge b-vi">MADE WITH<b>vi</b></span>
+    <span class="badge b-800">BEST VIEWED<b>800x600</b></span>
+  </div>
+  <p class="webring">[ &lt;&lt; Prev ] [ <b>Upcycled Hardware Webring</b> ] [ Next &gt;&gt; ]</p>
+  <p class="small">&copy; 2026 Panda Industries. All rights reserved. This page was last updated: <span id="updated">never</span>.</p>
+  <p class="small">No frames. No Java. No Flash. No cookies.</p>
+</footer>
+
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="window dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="title-bar"><span class="title-text" id="modal-title">Panda</span><span class="title-buttons" aria-hidden="true"><i>&times;</i></span></div>
+    <div class="window-body">
+      <div class="dialog-body"><span class="dialog-icon" id="modal-icon" aria-hidden="true">!</span><p id="modal-text"></p></div>
+      <div class="button-row">
+        <button class="btn" id="modal-ok" type="button">OK</button>
+        <button class="btn" id="modal-cancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

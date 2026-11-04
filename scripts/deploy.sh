@@ -40,5 +40,6 @@ if [ "$RESTART" = "--restart" ]; then
         rc-service speaker-soloist start || exit 1
         rc-service speaker-shairport start || exit 1
         rc-service bluetooth restart; rc-service panda-bt start || exit 1
+        rc-service panda-web restart || exit 1
         sleep 2; rc-status default | grep -E \"panda|speaker\""'
 fi

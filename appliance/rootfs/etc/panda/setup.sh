@@ -55,6 +55,14 @@ if ! id speaker >/dev/null 2>&1; then
 	adduser -S -D -H -h /var/lib/speaker -s /sbin/nologin -G speaker -g "Audio services" speaker
 fi
 addgroup speaker audio 2>/dev/null || true
+# Web control panel: PipeWire via group speaker, privileged actions only
+# through doas + /etc/panda/web-admin.sh (/etc/doas.d/panda-web.conf).
+if ! id panda-web >/dev/null 2>&1; then
+	log "creating system user panda-web"
+	addgroup -S panda-web
+	adduser -S -D -H -h /var/lib/panda-web -s /sbin/nologin -G panda-web -g "Web control panel" panda-web
+fi
+addgroup panda-web speaker 2>/dev/null || true
 
 # --- PipeWire: fixed hardware rate from board.conf ------------------------------
 mkdir -p /etc/pipewire/pipewire.conf.d
@@ -221,6 +229,11 @@ ReconnectIntervals = 1,2,4,8,16,32,64
 EOF
 # Pairing keys must survive reboots (saved by panda-bt after each pairing).
 grep -qx "+var/lib/bluetooth" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu include /var/lib/bluetooth
+# ...but not bluez's remote-name cache, which changes all the time.
+for d in /var/lib/bluetooth/*/cache; do
+	[ -d "$d" ] || continue
+	grep -qx -- "-${d#/}" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu exclude "$d"
+done
 
 # --- Chimes: synthesized once onto the boot media (slow on this CPU) ----------------
 chimes=/media/"$BOOT_MEDIA"/chimes
@@ -244,7 +257,7 @@ fi
 # --- Services -------------------------------------------------------------------
 rc-update add panda-firewall boot >/dev/null 2>&1 || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport bluetooth panda-bt panda-chime-boot crond; do
+	speaker-shairport bluetooth panda-bt panda-chime-boot panda-web crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

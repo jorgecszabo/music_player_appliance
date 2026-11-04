@@ -33,6 +33,11 @@ table inet panda {
 		ip6 saddr @lan6 accept
 		ip6 saddr @lan6_ra accept
 	}
+	# The web page runs unprivileged on 8080; serve it on port 80 too.
+	chain prerouting {
+		type nat hook prerouting priority dstnat;
+		tcp dport 80 redirect to :8080
+	}
 	chain forward {
 		type filter hook forward priority filter; policy drop;
 	}

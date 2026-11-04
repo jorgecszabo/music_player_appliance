@@ -1,0 +1,454 @@
+/* Panda Control Panel: a 1999-2003 home page, built with 2026 CSS.
+   Windows 98 chrome on a teal desktop, a Winamp-style display, and a
+   few GeoCities touches. No images, no web fonts: it all comes from CSS. */
+
+:root {
+  --desktop: #008080;
+  --face: #c0c0c0;
+  --light: #dfdfdf;
+  --hilight: #ffffff;
+  --shadow: #808080;
+  --dark: #0a0a0a;
+  --title-a: #000080;
+  --title-b: #1084d0;
+  --title-off-a: #808080;
+  --title-off-b: #b5b5b5;
+  --field: #ffffff;
+  --text: #000000;
+  --link: #0000ee;
+  --visited: #551a8b;
+  --lcd-bg: #000000;
+  --lcd-fg: #00e000;
+  --lcd-dim: #0a5c0a;
+  --ok: #008000;
+  --bad: #c00000;
+  --font: Tahoma, Verdana, Geneva, "MS Sans Serif", sans-serif;
+  --mono: "Courier New", Courier, monospace;
+  --raised: inset -1px -1px var(--dark), inset 1px 1px var(--hilight),
+            inset -2px -2px var(--shadow), inset 2px 2px var(--light);
+  --sunken: inset -1px -1px var(--hilight), inset 1px 1px var(--shadow),
+            inset -2px -2px var(--light), inset 2px 2px var(--dark);
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--desktop); }
+
+body {
+  margin: 0;
+  padding: 12px 16px 24px;
+  background: var(--desktop);
+  color: var(--text);
+  font: 13px/1.4 var(--font);
+}
+
+a { color: var(--link); }
+a:visited { color: var(--visited); }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--shadow);
+  border-bottom: 1px solid var(--hilight);
+  margin: 8px 0;
+}
+
+.small { font-size: 11px; }
+.center { text-align: center; }
+[hidden] { display: none !important; }
+
+/* --- Banner -------------------------------------------------------------------- */
+.banner { max-width: 1000px; margin: 0 auto 12px; text-align: center; }
+
+.wordart {
+  display: inline-block;
+  margin: 4px 0 2px;
+  font: italic 900 clamp(28px, 7vw, 54px)/1.05 Impact, "Arial Black", sans-serif;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #fff35c 0%, #ffb000 45%, #ff4b00 55%, #b30000 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 1px #3a0000;
+  filter: drop-shadow(3px 3px 0 #000) drop-shadow(0 0 1px #000);
+  transform: perspective(400px) rotateX(12deg) skewX(-6deg);
+}
+
+.tagline {
+  margin: 6px 0 10px;
+  color: #ffff00;
+  font: 14px "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.ticker {
+  overflow: hidden;
+  background: var(--lcd-bg);
+  color: #ffff66;
+  font: bold 13px var(--mono);
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+.ticker-track { display: inline-block; padding-left: 100%; animation: scroll 28s linear infinite; }
+@keyframes scroll { to { transform: translateX(-100%); } }
+
+/* --- Layout -------------------------------------------------------------------- */
+.layout {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+main { display: grid; gap: 12px; min-width: 0; }
+
+@media (max-width: 720px) {
+  body { padding: 8px 16px 16px; }
+  .layout { grid-template-columns: 1fr; }
+  .sidebar .nav { columns: 2; }
+}
+
+/* --- Windows ------------------------------------------------------------------- */
+.window {
+  background: var(--face);
+  box-shadow: var(--raised);
+  padding: 3px;
+  min-width: 0;
+}
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 3px;
+  background: linear-gradient(90deg, var(--title-a), var(--title-b));
+  color: #fff;
+  font-weight: bold;
+  font-size: 12px;
+  user-select: none;
+}
+.window:not(:focus-within):not(:hover) .title-bar {
+  background: linear-gradient(90deg, var(--title-off-a), var(--title-off-b));
+}
+.title-icon { width: 16px; text-align: center; }
+.title-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-buttons { display: flex; gap: 2px; }
+.title-buttons i {
+  display: inline-block;
+  width: 16px; height: 14px;
+  background: var(--face);
+  box-shadow: var(--raised);
+  color: #000;
+  font: bold 10px/14px var(--font);
+  text-align: center;
+  font-style: normal;
+}
+.title-buttons i:last-child { margin-left: 2px; }
+.window-body { padding: 10px; }
+
+.sidebar .nav { list-style: none; margin: 0; padding: 0; }
+.sidebar .nav li { padding: 3px 0 3px 14px; position: relative; }
+.sidebar .nav li::before {
+  content: "";
+  position: absolute; left: 2px; top: 8px;
+  width: 6px; height: 6px;
+  background: radial-gradient(circle at 30% 30%, #ff8, #f80 60%, #a40);
+  border-radius: 50%;
+}
+.new {
+  color: #ff0000;
+  font: bold 9px var(--font);
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { visibility: hidden; } }
+
+/* Hit counter: an odometer. */
+.counter-box { text-align: center; }
+.odometer {
+  display: inline-block;
+  margin: 3px 0;
+  padding: 2px 4px;
+  background: #000;
+  color: #fff;
+  font: bold 16px var(--mono);
+  letter-spacing: 3px;
+  box-shadow: var(--sunken);
+  background-image: repeating-linear-gradient(90deg, #000 0 11px, #333 11px 13px);
+}
+
+.led {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #600;
+  box-shadow: inset -1px -1px 1px rgba(0,0,0,.6);
+  vertical-align: middle;
+}
+.led.on { background: #0f0; box-shadow: 0 0 4px #0f0; }
+.led.warn { background: #fc0; }
+
+/* --- Controls ------------------------------------------------------------------ */
+.btn {
+  min-width: 75px;
+  padding: 4px 12px;
+  background: var(--face);
+  color: #000;
+  border: 0;
+  box-shadow: var(--raised);
+  font: 12px var(--font);
+  cursor: pointer;
+}
+.btn:active:not(:disabled) { box-shadow: var(--sunken); padding: 5px 11px 3px 13px; }
+.btn:focus-visible { outline: 1px dotted #000; outline-offset: -5px; }
+.btn:disabled { color: var(--shadow); text-shadow: 1px 1px 0 var(--hilight); cursor: default; }
+.btn-big { font-weight: bold; padding: 10px 16px; min-width: 150px; }
+.btn-big.active { box-shadow: var(--sunken); background: repeating-conic-gradient(var(--face) 0 25%, var(--hilight) 0 50%) 0 0 / 2px 2px; }
+
+.button-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; margin-top: 8px; }
+.button-row.left { justify-content: flex-start; }
+
+.field, select {
+  padding: 3px 4px;
+  background: var(--field);
+  border: 0;
+  box-shadow: var(--sunken);
+  font: 12px var(--font);
+  min-width: 0;
+}
+.field { width: 220px; max-width: 100%; }
+
+.check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+
+.sunken { box-shadow: var(--sunken); }
+
+fieldset.group {
+  margin: 10px 0 0;
+  padding: 8px 10px 10px;
+  border: 0;
+  box-shadow: inset -1px -1px var(--hilight), inset 1px 1px var(--shadow),
+              inset -2px -2px var(--shadow), inset 2px 2px var(--hilight);
+}
+fieldset.group legend { padding: 0 3px; }
+
+/* Win98 progress bar: blue blocks. */
+.progress {
+  display: inline-block;
+  width: 180px; max-width: 60%;
+  height: 16px;
+  padding: 2px;
+  background: var(--field);
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: repeating-linear-gradient(90deg, var(--title-a) 0 8px, transparent 8px 10px);
+}
+
+/* Trackbar sliders. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 24px;
+  width: 100%;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--face); box-shadow: var(--sunken);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px; background: var(--face); box-shadow: var(--sunken);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px; height: 21px; margin-top: -9px;
+  background: var(--face); box-shadow: var(--raised); border: 0;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 11px; height: 21px; border: 0; border-radius: 0;
+  background: var(--face); box-shadow: var(--raised);
+}
+
+/* The mixer: vertical sliders like sndvol32.exe. */
+.mixer { display: flex; flex-wrap: wrap; gap: 8px; }
+.channel {
+  width: 104px;
+  padding: 6px;
+  box-shadow: inset -1px -1px var(--hilight), inset 1px 1px var(--shadow);
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.channel-name { font-weight: bold; font-size: 11px; height: 28px; overflow: hidden; }
+.channel .vslider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 24px;
+  height: 120px;
+}
+.channel .vslider::-webkit-slider-runnable-track { width: 4px; height: 100%; }
+.channel .vslider::-webkit-slider-thumb { width: 21px; height: 11px; margin-top: 0; margin-left: -9px; }
+.channel .vslider::-moz-range-track { width: 4px; height: 100%; }
+.channel .vslider::-moz-range-thumb { width: 21px; height: 11px; }
+.channel-value { font: 11px var(--mono); }
+
+/* --- Tables -------------------------------------------------------------------- */
+table.grid {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  background: var(--field);
+  box-shadow: var(--sunken);
+  font-size: 12px;
+}
+table.grid th {
+  background: var(--face);
+  box-shadow: var(--raised);
+  font-weight: normal;
+  text-align: left;
+  padding: 3px 6px;
+}
+table.grid td { padding: 3px 6px; border-bottom: 1px dotted var(--light); vertical-align: middle; }
+table.grid td.center { color: var(--shadow); padding: 10px; }
+table.grid .btn { min-width: 0; padding: 2px 8px; font-size: 11px; }
+
+table.props { border-collapse: collapse; width: 100%; }
+table.props th { text-align: left; font-weight: bold; padding: 4px 10px 4px 0; width: 130px; vertical-align: top; white-space: nowrap; }
+table.props td { padding: 4px 0; overflow-wrap: anywhere; }
+
+.st-ok { color: var(--ok); font-weight: bold; }
+.st-bad { color: var(--bad); font-weight: bold; }
+.st-dim { color: var(--shadow); }
+
+@media (max-width: 520px) {
+  table.props th { width: auto; display: block; padding-bottom: 0; }
+  table.props td { display: block; padding-bottom: 6px; }
+  table.props tr { display: block; }
+  .grid .hide-narrow { display: none; }
+}
+
+/* --- Winamp-style display ------------------------------------------------------ */
+.lcd {
+  background: var(--lcd-bg);
+  color: var(--lcd-fg);
+  padding: 8px 10px;
+  box-shadow: var(--sunken);
+  font: bold 14px var(--mono);
+  text-shadow: 0 0 4px rgba(0, 224, 0, .55);
+}
+.lcd-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lcd-row + .lcd-row { margin-top: 6px; }
+.lcd-state { width: 16px; text-align: center; }
+.lcd-time { font-size: 26px; letter-spacing: 2px; min-width: 88px; }
+.lcd-title-box { flex: 1; overflow: hidden; white-space: nowrap; min-width: 0; }
+.lcd-title { display: inline-block; }
+.lcd-title.scrolling { padding-left: 100%; animation: scroll 14s linear infinite; }
+.lcd-small { font-size: 10px; flex-wrap: wrap; gap: 6px; }
+.lcd-tag { border: 1px solid var(--lcd-dim); padding: 0 4px; }
+.lcd-tag.off { color: var(--lcd-dim); text-shadow: none; }
+.lcd-source { margin-left: auto; }
+
+.track {
+  margin-top: 10px;
+  padding: 6px 8px;
+  background: #ffffe1;
+  border: 1px solid #000;
+  font-size: 12px;
+}
+
+/* --- Bluetooth ----------------------------------------------------------------- */
+.pair-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.pair-row > div { flex: 1; min-width: 200px; }
+.pair-row .progress { width: 100%; max-width: none; margin-top: 6px; }
+
+/* --- Under construction -------------------------------------------------------- */
+.construction {
+  margin: 4px auto 6px;
+  max-width: 320px;
+  padding: 6px;
+  text-align: center;
+  background: repeating-linear-gradient(-45deg, #ffd800 0 14px, #111 14px 28px);
+  box-shadow: var(--raised);
+}
+.construction span {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #ffd800;
+  color: #000;
+  font: bold 13px "Arial Black", Impact, sans-serif;
+  border: 2px solid #000;
+}
+.construction-mini {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 4px;
+  background: #ffd800;
+  border: 1px solid #000;
+  font: bold 9px var(--font);
+}
+
+/* --- Logs ---------------------------------------------------------------------- */
+.console {
+  margin: 8px 0 0;
+  padding: 8px;
+  height: 280px;
+  overflow: auto;
+  background: #000;
+  color: #c0c0c0;
+  font: 11px/1.35 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- Footer: 88x31 buttons and a webring ----------------------------------------- */
+.footer { max-width: 1000px; margin: 16px auto 0; text-align: center; color: #fff; }
+.footer .small { color: #e0ffff; }
+.badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.badge {
+  width: 88px; height: 31px;
+  display: inline-flex; flex-direction: column; justify-content: center;
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px rgba(255,255,255,.6), inset -1px -1px rgba(0,0,0,.5);
+  font: bold 8px/1.1 Verdana, var(--font);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.badge b { font: 900 11px/1.1 "Arial Black", Verdana, sans-serif; letter-spacing: 0; }
+.b-alpine { background: linear-gradient(#2a5d9f, #0d3a73); color: #fff; }
+.b-pw { background: linear-gradient(#fff, #c8c8c8); color: #333; }
+.b-pw b { color: #c00; }
+.b-panda { background: #000; color: #fff; }
+.b-panda b { color: #ffcc00; }
+.b-upcycled { background: linear-gradient(#3c9a3c, #1f5f1f); color: #ffff99; }
+.b-vi { background: #fff; color: #000; }
+.b-vi b { color: #008; font-family: var(--mono); }
+.b-800 { background: linear-gradient(#ffde59, #f39c12); color: #000; }
+.webring { margin: 12px 0 6px; font-size: 12px; }
+
+/* --- Dialog -------------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, .25);
+  z-index: 10;
+}
+.dialog { width: 360px; max-width: 100%; }
+.dialog-body { display: flex; gap: 12px; align-items: flex-start; }
+.dialog-icon {
+  flex: none;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: #ffd800;
+  border: 2px solid #000;
+  font: bold 20px/28px var(--font);
+  text-align: center;
+}
+.dialog-icon.info { background: #fff; color: #00f; font-family: Georgia, serif; font-style: italic; }
+.dialog-icon.err { background: #f00; color: #fff; }
+.dialog-body p { margin: 4px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track, .lcd-title.scrolling, .new { animation: none; }
+  .ticker-track { padding-left: 0; }
+  .lcd-title.scrolling { padding-left: 0; }
+}

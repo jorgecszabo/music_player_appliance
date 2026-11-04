@@ -1,7 +1,8 @@
 #!/sbin/openrc-run
 # PipeWire media server, system-wide, as the unprivileged "speaker" user.
-# Clients (WirePlumber, spotifyd, shairport-sync) run as "speaker" too and
-# connect through /run/speaker/pipewire-0.
+# Clients (WirePlumber, Soloist, shairport-sync) run as "speaker" too and
+# connect through /run/speaker/pipewire-0. The web page (user panda-web, in
+# group speaker) connects too: start_post opens the socket to the group.
 
 description="PipeWire media server (system-wide, user speaker)"
 supervisor=supervise-daemon
@@ -24,4 +25,13 @@ depend() {
 start_pre() {
 	checkpath --directory --owner speaker:speaker --mode 0750 \
 		/run/speaker /var/lib/speaker /var/log/speaker
+}
+
+start_post() {
+	# PipeWire creates its socket 0755; connecting needs write permission.
+	local i=0
+	while [ ! -S /run/speaker/pipewire-0 ] && [ $i -lt 100 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	chmod 0770 /run/speaker/pipewire-0 2>/dev/null || true
 }

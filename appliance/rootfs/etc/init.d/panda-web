@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+# Web control panel (user panda-web), /etc/panda/panda-web.py on port 8080.
+# The firewall redirects port 80 to it, so it's http://panda.local/.
+
+description="Web control panel (user panda-web)"
+supervisor=supervise-daemon
+command=/usr/bin/python3
+command_args="/etc/panda/panda-web.py"
+command_user="panda-web:panda-web"
+directory=/var/lib/panda-web
+output_log=/var/log/panda-web.log
+error_log=/var/log/panda-web.log
+respawn_delay=3
+respawn_max=0
+
+depend() {
+	need net
+	after speaker-pipewire panda-bt panda-firewall
+}
+
+start_pre() {
+	checkpath --directory --owner panda-web:panda-web --mode 0750 /var/lib/panda-web
+	checkpath --file --owner panda-web:panda-web --mode 0640 /var/log/panda-web.log
+}

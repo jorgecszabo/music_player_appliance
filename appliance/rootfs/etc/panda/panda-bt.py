@@ -15,9 +15,16 @@ Runs as root (service panda-bt): it saves pairings with lbu and drives LEDs.
 - New pairings and forgets are saved with `lbu commit` (only then: routine
   connects never write the card).
 - At start, try to reconnect to the paired devices (most recent first).
+- Control socket /run/panda/bt.sock (group panda-web, for the web page):
+  one JSON request per line, one JSON reply per line. Commands:
+  {"cmd": "status"}, {"cmd": "pair", "open": true|false},
+  {"cmd": "forget", "path": "<device path>"}, {"cmd": "forget-all"}.
 - If bluetoothd goes away, exit; supervise-daemon restarts us.
 """
 import asyncio
+import grp
+import json
+import os
 import subprocess
 import sys
 import time
@@ -32,6 +39,8 @@ LONG_S = 5
 # Events with a chime (/etc/panda/chime.sh <event>).
 CHIMES = {"pairing-on", "pairing-off", "paired", "connected", "disconnected", "forgot-all"}
 AGENT_PATH = "/panda/agent"
+CONTROL_SOCK = "/run/panda/bt.sock"
+CONTROL_GROUP = "panda-web"
 BLUEZ = "org.bluez"
 
 
@@ -121,6 +130,7 @@ class App:
         self.devices = {}          # path -> {"Paired", "Trusted", "Connected", "Alias"}
         self.recent = []           # device paths, most recently connected first
         self.window_task = None
+        self.window_end = 0.0
         self.forgetting = False
         self.paired_at = -100.0
 
@@ -176,7 +186,7 @@ class App:
             return
         d = self.devices.setdefault(path, {})
         before = dict(d)
-        for k in ("Paired", "Trusted", "Connected", "Alias"):
+        for k in ("Paired", "Trusted", "Connected", "Alias", "Address"):
             if k in props:
                 v = props[k]
                 d[k] = v.value if isinstance(v, Variant) else v
@@ -225,6 +235,7 @@ class App:
     async def window(self):
         try:
             await self.set_window(True)
+            self.window_end = time.monotonic() + WINDOW_S
             log(f"pairing window open ({WINDOW_S} s)")
             self.event("pairing-on")
             self.show_state()
@@ -237,10 +248,94 @@ class App:
             asyncio.get_running_loop().call_soon(self.show_state)
 
     def toggle_window(self):
-        if self.window_open:
-            self.window_task.cancel()
-        else:
+        self.set_window_state(not self.window_open)
+
+    def set_window_state(self, open_):
+        if open_ and not self.window_open:
             self.window_task = asyncio.ensure_future(self.window())
+        elif not open_ and self.window_open:
+            self.window_task.cancel()
+
+    async def forget(self, path):
+        d = self.devices.get(path)
+        if d is None:
+            raise ValueError("unknown device")
+        log("forgetting", d.get("Alias", path))
+        await self.adapter.call_remove_device(path)
+        self.event("forgot", d.get("Alias", path))
+        await self.save(f"forgot {d.get('Alias', path)}")
+
+    # --- control socket (web page) -------------------------------------------------
+    async def status(self):
+        track = None
+        try:
+            root = await self.iface("/", "org.freedesktop.DBus.ObjectManager")
+            for path, ifaces in (await root.call_get_managed_objects()).items():
+                p = ifaces.get("org.bluez.MediaPlayer1")
+                if p and self.devices.get(path.rsplit("/", 1)[0], {}).get("Connected"):
+                    t = p.get("Track", Variant("a{sv}", {})).value
+                    track = {k.lower(): v.value for k, v in t.items()
+                             if k in ("Title", "Artist", "Album", "Duration")}
+                    track["status"] = p["Status"].value if "Status" in p else ""
+                    track["position"] = p["Position"].value if "Position" in p else 0
+        except DBusError:
+            pass
+        return {
+            "adapter": self.adapter_path,
+            "alias": self.cfg["SPEAKER_NAME"],
+            "window": self.window_open,
+            "window_left": max(0, round(self.window_end - time.monotonic())) if self.window_open else 0,
+            "forgetting": self.forgetting,
+            "devices": [dict(path=p, address=d.get("Address", ""), name=d.get("Alias", ""),
+                             paired=bool(d.get("Paired")), trusted=bool(d.get("Trusted")),
+                             connected=bool(d.get("Connected")))
+                        for p, d in self.devices.items()],
+            "track": track,
+        }
+
+    async def control(self, req):
+        cmd = req.get("cmd")
+        if cmd == "status":
+            return await self.status()
+        if cmd == "pair":
+            self.set_window_state(bool(req.get("open")))
+            await asyncio.sleep(0.2)
+            return {"window": self.window_open}
+        if cmd == "forget":
+            await self.forget(str(req.get("path", "")))
+            return {"ok": True}
+        if cmd == "forget-all":
+            asyncio.ensure_future(self.forget_all())
+            return {"ok": True}
+        raise ValueError(f"unknown command {cmd!r}")
+
+    async def on_control(self, reader, writer):
+        try:
+            line = await asyncio.wait_for(reader.readline(), 5)
+            try:
+                reply = await self.control(json.loads(line))
+            except (ValueError, DBusError) as e:
+                reply = {"error": str(e)}
+            writer.write(json.dumps(reply).encode() + b"\n")
+            await writer.drain()
+        except (asyncio.TimeoutError, ConnectionError):
+            pass
+        finally:
+            writer.close()
+
+    async def control_server(self):
+        os.makedirs(os.path.dirname(CONTROL_SOCK), exist_ok=True)
+        try:
+            os.unlink(CONTROL_SOCK)
+        except FileNotFoundError:
+            pass
+        server = await asyncio.start_unix_server(self.on_control, CONTROL_SOCK)
+        try:
+            os.chown(CONTROL_SOCK, 0, grp.getgrnam(CONTROL_GROUP).gr_gid)
+            os.chmod(CONTROL_SOCK, 0o660)
+        except KeyError:
+            os.chmod(CONTROL_SOCK, 0o600)
+        return server
 
     async def paired(self, path):
         name = self.devices.get(path, {}).get("Alias", path)
@@ -354,6 +449,7 @@ class App:
             sum(1 for d in self.devices.values() if d.get("Paired")), "paired device(s)")
         self.show_state()
 
+        self.control_srv = await self.control_server()
         tasks = [asyncio.ensure_future(self.button()), asyncio.ensure_future(self.reconnect())]
         await self.bluez_gone
         log("bluetoothd went away; exiting")

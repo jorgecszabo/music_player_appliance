@@ -23,6 +23,10 @@ firewall redirects port 80 to it. LAN only (firewall).
   GET  /api/radio/countries  all countries with stations (code, name, count)
   GET  /api/radio/favorites
   POST /api/radio            {"cmd": "play", "uuid"} | {"cmd": "stop"} | {"cmd": "fav", "uuid", "add": bool}
+  POST /api/ota/upload        an update bundle (.pota) as the raw body, Content-Type
+                             application/x-panda-ota + X-Panda-Panel; streamed into
+                             doas web-admin.sh ota-install (all checks run as root there)
+  POST /api/ota              {"cmd": "activate", "slot": "a"|"b"}  (boots it on trial)
   GET  /api/wifi/scan        scan now (a few seconds) and list the networks in range
   POST /api/wifi             {"cmd": "connect", "ssid", "password"?, "hidden"?} | {"cmd": "forget", "ssid"}
                              | {"cmd": "settings", "country"?, "adapter"?}   (panda-wifi control socket;
@@ -54,6 +58,9 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
 ADMIN = ["doas", "-n", "/etc/panda/web-admin.sh"]
 PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
 BT_SOCK = "/run/panda/bt.sock"
+MAX_UPLOAD = 1 << 30                 # larger than any bundle (the card has 512 MiB)
+UPLOAD = {}                          # progress of the running/last OTA upload
+UPLOAD_LOCK = threading.Lock()
 WIFI_SOCK = "/run/panda/wifi.sock"
 SERVICES = ["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-wireplumber",
             "speaker-soloist", "speaker-shairport", "speaker-radio", "speaker-arbiter", "bluetooth",
@@ -361,7 +368,7 @@ class Collector:
         # (name, period in s), cheapest first.
         self.probes = [("services", 15, self.services), ("net", 10, self.net),
                        ("pwtop", 10, self.pwtop), ("lbu", 15, self.lbu), ("sync", 30, self.sync),
-                       ("spotify", 30, self.spotify)]
+                       ("spotify", 30, self.spotify), ("ota", 60, self.ota)]
 
     def active(self):
         return time.monotonic() < self.active_until
@@ -439,6 +446,8 @@ class Collector:
             "radio": radio_status(),
             "nowplaying": self.nowplaying(),
             "spotify": self.slow.get("spotify"),
+            "ota": self.slow.get("ota"),
+            "upload": dict(UPLOAD),
         }
 
     def host(self, board, app):
@@ -546,6 +555,12 @@ class Collector:
         out = run(ADMIN + ["soloist-key-status"]).split()
         return {"key_set": bool(out) and out[0] == "set",
                 "key_changed": out[1] if len(out) > 1 else None}
+
+    def ota(self):
+        try:
+            return json.loads(run(ADMIN + ["ota-status"], timeout=20) or "{}")
+        except ValueError:
+            return {"error": "no answer from panda-ota"}
 
     def lbu(self):
         out = run(ADMIN + ["lbu-status"])
@@ -863,6 +878,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.check_host():
             return
+        if urlparse(self.path).path == "/api/ota/upload":
+            return self.ota_upload()
         if self.headers.get("X-Panda-Panel") != "1" or \
                 not self.headers.get("Content-Type", "").startswith("application/json"):
             return self.send_json({"error": "forbidden"}, 403)
@@ -878,7 +895,7 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/service": self.service, "/api/system": self.system,
                    "/api/name": self.name, "/api/spotify-key": self.spotify_key,
                    "/api/audio": self.audio_settings, "/api/radio": self.radio,
-                   "/api/wifi": self.wifi}.get(path)
+                   "/api/wifi": self.wifi, "/api/ota": self.ota_cmd}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -894,6 +911,109 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             self.send_json({"error": f"internal error: {e.__class__.__name__}"}, 500)
+
+    # --- OTA updates ---------------------------------------------------------------
+    def ota_upload(self):
+        """Stream the request body into the root helper; never buffered in memory or
+        on disk here. The upload progress is in the status (UPLOAD)."""
+        if self.headers.get("X-Panda-Panel") != "1" or \
+                self.headers.get("Content-Type", "") != "application/x-panda-ota":
+            return self.send_json({"error": "forbidden"}, 403)
+        try:
+            n = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return self.send_json({"error": "Content-Length required"}, 411)
+        if not 0 < n <= MAX_UPLOAD:
+            self.close_connection = True
+            return self.send_json({"error": "bundle too large"}, 413)
+        if not UPLOAD_LOCK.acquire(blocking=False):
+            self.close_connection = True
+            return self.send_json({"error": "another update is being installed"}, 409)
+        try:
+            self.send_json(*self.ota_stream(n))
+        finally:
+            UPLOAD_LOCK.release()
+            COLLECTOR.refresh("ota")
+
+    def ota_stream(self, n):
+        UPLOAD.clear()
+        UPLOAD.update(active=True, received=0, total=n, stage="upload", done=0, error=None)
+        proc = subprocess.Popen(ADMIN + ["ota-install"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result, errs = {}, []
+
+        def read_out():
+            for line in proc.stdout:
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if "stage" in msg:
+                    UPLOAD["stage"] = msg["stage"]
+                if "done" in msg:
+                    UPLOAD["done"] = msg["done"]
+                if "version" in msg:
+                    UPLOAD["version"] = msg["version"]
+                if "ok" in msg:
+                    result.update(msg)
+
+        def read_err():
+            for line in proc.stderr:
+                errs.append(line.decode(errors="replace").strip())
+                del errs[:-20]
+        threads = [threading.Thread(target=read_out, daemon=True),
+                   threading.Thread(target=read_err, daemon=True)]
+        for th in threads:
+            th.start()
+        left, broken = n, False
+        while left > 0:
+            chunk = self.rfile.read(min(1 << 16, left))
+            if not chunk:
+                break                       # the browser went away
+            left -= len(chunk)
+            UPLOAD["received"] = n - left
+            if not broken:
+                try:
+                    proc.stdin.write(chunk)
+                except (BrokenPipeError, OSError):
+                    broken = True           # rejected: read (and drop) the rest
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=600)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        for th in threads:
+            th.join(5)
+        UPLOAD["active"] = False
+        if left:
+            self.close_connection = True
+            UPLOAD["error"] = "upload interrupted"
+            return {"error": "upload interrupted"}, 400
+        if result.get("ok"):
+            UPLOAD["stage"] = "installed"
+            return {"ok": True, "slot": result.get("slot"), "version": result.get("version")}, 200
+        err = result.get("error") or (errs[-1] if errs else "install failed")
+        UPLOAD["error"] = err
+        return {"error": err}, 400
+
+    def ota_cmd(self, req):
+        if req.get("cmd") == "activate":
+            slot = req.get("slot")
+            if slot not in ("a", "b"):
+                raise ValueError("slot must be a or b")
+            out = run(ADMIN + ["ota-activate", slot], timeout=120)
+            try:
+                res = json.loads(out.strip().splitlines()[0]) if out.strip() else {}
+            except ValueError:
+                res = {}
+            COLLECTOR.refresh("ota")
+            if not res.get("ok"):
+                raise ValueError(res.get("error") or "couldn't switch slots")
+            return {"ok": True, "slot": slot, "version": res.get("version")}
+        raise ValueError("unknown command")
 
     # --- actions ---------------------------------------------------------------
     def volume(self, req):

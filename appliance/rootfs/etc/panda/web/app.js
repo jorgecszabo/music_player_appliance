@@ -103,6 +103,136 @@ function render(s) {
   renderSpotify(s);
   renderTone(s);
   renderRadio(s);
+  renderUpdate(s);
+}
+
+// --- system update (OTA) -----------------------------------------------------------
+let otaBusy = false;      // an upload from this page is running
+
+function fmtWhen(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderUpdate(s) {
+  const o = s.ota;
+  const body = $("ota-table").tBodies[0];
+  if (!o || o.error) {
+    body.replaceChildren(el("tr", {}, el("td", { colspan: 5, class: "center" },
+      o ? `Can't read the update slots: ${o.error}` : "Checking...")));
+    return;
+  }
+  const key = JSON.stringify([o.slots, o.booted, o.trial, o.confirmed]);
+  if (body.dataset.key !== key) {
+    body.dataset.key = key;
+    body.replaceChildren(...["a", "b"].map((slot) => {
+      const i = o.slots[slot];
+      const running = slot === o.booted;
+      const status = running ? (o.trial === slot ? "Running (on trial)" : "Running")
+        : !i ? "Empty" : o.trial === slot ? "Starts next" : "Standby";
+      const btn = !running && i
+        ? el("button", { class: "btn", type: "button", onclick: () => otaSwitch(slot, i.version) },
+          o.trial === slot ? "Restart now" : "Switch...")
+        : "";
+      return el("tr", { class: running ? "slot-run" : "" },
+        el("td", {}, slot.toUpperCase()),
+        el("td", {}, i ? i.version || "?" : "-"),
+        el("td", { class: "hide-narrow" }, i ? fmtWhen(i.installed || i.built) : "-"),
+        el("td", {}, status),
+        el("td", {}, btn));
+    }));
+  }
+  let notice = "";
+  if (o.rolled_back) notice = "The last update didn't start up properly, so the speaker went back to the version it had before. Your settings are as they were.";
+  else if (o.trial && o.trial === o.booted) notice = "This version is on trial: it is kept once the speaker has been running fine for a minute. If it doesn't come up properly, the speaker restarts into the previous version.";
+  else if (o.trial) notice = `Version ${(o.slots[o.trial] || {}).version || "?"} starts at the next restart.`;
+  setText("ota-notice", notice);
+  $("ota-notice").hidden = !notice;
+  const u = s.upload || {};
+  if (!otaBusy && u.active) otaProgress(u);   // an upload from another browser
+}
+
+function otaProgress(u, sentFraction) {
+  $("ota-progress").hidden = false;
+  let frac = 0, text = "";
+  if (u.stage === "copy" || u.stage === "verified") {
+    frac = u.total ? (u.done || 0) / u.total : 0;
+    text = u.stage === "verified" ? `Signature OK (version ${u.version || "?"}). Copying files...`
+      : `Copying files... ${Math.round(frac * 100)}%`;
+  } else {
+    frac = sentFraction !== undefined ? sentFraction : u.total ? (u.received || 0) / u.total : 0;
+    text = `Sending the update... ${Math.round(frac * 100)}%`;
+  }
+  $("ota-fill").style.width = `${Math.min(100, frac * 100).toFixed(1)}%`;
+  setText("ota-detail", text);
+}
+
+function otaUpload(file) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "/api/ota/upload");
+    x.setRequestHeader("Content-Type", "application/x-panda-ota");
+    x.setRequestHeader("X-Panda-Panel", "1");
+    x.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const u = (last && last.upload) || {};
+      // The device verifies while the file streams in: show its own progress once it has some.
+      if (u.active && (u.stage === "copy" || u.stage === "verified")) otaProgress(u);
+      else otaProgress({ stage: "upload" }, e.loaded / e.total);
+    };
+    x.onload = () => {
+      let d = {};
+      try { d = JSON.parse(x.responseText); } catch (e) { /* not JSON */ }
+      if (x.status === 200 && d.ok) resolve(d);
+      else reject(new Error(d.error || `HTTP ${x.status}`));
+    };
+    x.onerror = () => reject(new Error("The connection to the speaker was lost."));
+    x.send(file);
+  });
+}
+
+async function otaInstall() {
+  const file = $("ota-file").files[0];
+  if (!file) return;
+  if (!/\.pota$/i.test(file.name)) return oops(new Error("That isn't an update file (.pota)."));
+  if (!await dialog(`Install ${file.name} (${(file.size / 1048576).toFixed(0)} MB)? The running version isn't touched; the new one starts after a restart.`, { title: "Panda Update Wizard", icon: "i", kind: "info" })) return;
+  otaBusy = true;
+  $("ota-install").disabled = $("ota-browse").disabled = true;
+  setText("ota-step", "Please wait while Setup installs the update. This takes a few minutes.");
+  otaProgress({ stage: "upload" }, 0);
+  try {
+    const r = await otaUpload(file);
+    $("ota-fill").style.width = "100%";
+    setText("ota-detail", `Version ${r.version} installed in slot ${r.slot.toUpperCase()}.`);
+    setText("ota-step", "Setup has finished installing the update.");
+    if (await dialog(`Setup has finished installing version ${r.version}. You must restart the speaker before the new version takes effect. Do you want to restart now?`, { title: "Panda Update Wizard", icon: "i", kind: "info" })) {
+      await otaActivate(r.slot);
+    }
+  } catch (err) {
+    setText("ota-step", "The update was not installed. Nothing has changed.");
+    setText("ota-detail", "");
+    $("ota-progress").hidden = true;
+    oops(err);
+  } finally {
+    otaBusy = false;
+    $("ota-browse").disabled = false;
+    $("ota-install").disabled = !$("ota-file").files[0];
+  }
+}
+
+async function otaActivate(slot) {
+  try {
+    await post("/api/ota", { cmd: "activate", slot });
+    info("Restarting... The page reconnects by itself in a few minutes.");
+  } catch (err) { oops(err); }
+}
+
+async function otaSwitch(slot, version) {
+  const o = last && last.ota;
+  if (o && o.trial === slot) return otaActivate(slot);
+  if (!await dialog(`Switch to version ${version} (slot ${slot.toUpperCase()})? The speaker restarts. Your settings are kept.`, { title: "System Update" })) return;
+  otaActivate(slot);
 }
 
 // --- radio ------------------------------------------------------------------------
@@ -985,6 +1115,14 @@ function wireActions() {
   window.addEventListener("hashchange", () => {
     if (location.hash === "#network" && last && last.wifi && last.wifi.iface) wifiScan();
   });
+
+  $("ota-browse").addEventListener("click", () => $("ota-file").click());
+  $("ota-file").addEventListener("change", () => {
+    const f = $("ota-file").files[0];
+    $("ota-file-name").value = f ? f.name : "";
+    $("ota-install").disabled = !f || otaBusy;
+  });
+  $("ota-install").addEventListener("click", otaInstall);
 
   $("reboot-btn").addEventListener("click", async () => {
     if (!await dialog("Are you sure you want to restart the speaker? Unsaved changes are lost.", { title: "Shut Down Panda" })) return;

@@ -54,9 +54,6 @@ Then boot with the serial console, set a root password for the console
 the keys in `appliance/authorized_keys`, or this host's `~/.ssh/*.pub` if that
 file is missing.
 
-To update a running device without reflashing: `scripts/deploy.sh [--restart]`
-(`PANDA_HOST=user@host` if it isn't `panda@panda.local`).
-
 Wi-Fi out of the box: put `appliance/wifi.json` (not in git) before building,
 or drop one onto the card's boot partition (imported at boot, then deleted):
 
@@ -70,6 +67,39 @@ A board directory needs a
 `board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile
 and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
 `scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
+
+## Updates (OTA)
+
+The card holds two versions (slots A and B, `slots/<x>/` on the boot partition:
+kernel, initramfs, modules, the package repository). An update goes into the slot
+that isn't running; the other one stays untouched. Design: PLAN.md, "OTA updates".
+
+```sh
+scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
+```
+
+Install it on the web page (System Update: Browse..., Install, restart), or over SSH:
+
+```sh
+ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-install' < build/ota/panda-$BOARD-*.pota
+ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-activate b'    # the slot it reported; reboots
+```
+
+The new version starts on trial: early in its boot the boot menu goes back to the old
+slot, so a crash or a hang (watchdog) returns to the old version. Once the services and
+the web page are up (after a minute), it is kept; unhealthy for 5 minutes, it reboots
+into the old version and restores the settings from before the update. Bundles are signed
+with the abuild key (`keys/`) and only install on the board they were built for.
+`scripts/test-ota.sh` tests the device side on this host.
+
+The code is the `panda-appliance` package (`aports/panda-appliance`, from
+`appliance/rootfs`); the lbu overlay holds settings only. To try code without an
+update: `scripts/deploy.sh [--restart]` (`PANDA_HOST=user@host` if it isn't
+`panda@panda.local`) installs the package into the running system; the next boot runs
+the slot's version again.
+
+Recovery without the web page: the boot menu on the serial console lists both slots,
+or edit `extlinux/extlinux.conf` (`DEFAULT a` / `DEFAULT b`) on a PC.
 
 ## Our forks of Alpine packages
 

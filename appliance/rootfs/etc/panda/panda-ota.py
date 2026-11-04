@@ -309,7 +309,9 @@ def cmd_status():
     print(json.dumps({"ok": True, "booted": booted, "confirmed": st["confirmed"],
                       "trial": st["trial"], "standby": other(booted) if booted else None,
                       "slots": slots, "free": free, "running": cur,
-                      "board": BOARD.get("BOARD"), "arch": BOARD.get("ALPINE_ARCH")}))
+                      "board": BOARD.get("BOARD"), "arch": BOARD.get("ALPINE_ARCH"),
+                      "rolled_back": os.path.exists((MEDIA + "/.run" if TEST else "/run/panda")
+                                                    + "/ota-rollback")}))
 
 
 def verify_signature(manifest, sig):

@@ -31,6 +31,7 @@
       <li><a href="#services">Services</a></li>
       <li><a href="#logs">Logs</a></li>
       <li><a href="#settings">Settings</a></li>
+      <li><a href="#update">System Update</a> <span class="new">NEW!</span></li>
     </ul>
     <hr>
     <div class="counter-box">
@@ -305,6 +306,42 @@
       <p class="small">Factory reset forgets everything saved: Bluetooth phones, Wi-Fi networks (except any built
         into the card), the Spotify key, tone settings, radio favorites, the name. Also: hold S2 while powering on (LEDs blink fast;
         keep holding for 5 seconds).</p>
+    </fieldset>
+  </div>
+</section>
+
+<section class="window" id="update">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128190;</span><span class="title-text">System Update</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <p class="notice" id="ota-notice" hidden></p>
+    <fieldset class="group">
+      <legend>Installed versions</legend>
+      <table class="grid" id="ota-table">
+        <thead><tr><th>Slot</th><th>Version</th><th class="hide-narrow">Installed</th><th>Status</th><th></th></tr></thead>
+        <tbody><tr><td colspan="5" class="center">Checking...</td></tr></tbody>
+      </table>
+      <p class="small">The speaker keeps two versions (slots). Updates go into the one that isn't running;
+        the other one stays as it is, so you can always go back.</p>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Install an update</legend>
+      <div class="wizard">
+        <span class="wizard-art" aria-hidden="true">&#128190;</span>
+        <div class="wizard-main">
+          <p id="ota-step">Choose an update file (<b>.pota</b>) for this speaker, then press Install.</p>
+          <div class="button-row left">
+            <input type="file" id="ota-file" accept=".pota" hidden>
+            <input type="text" class="field" id="ota-file-name" readonly placeholder="(no file chosen)" aria-label="Update file">
+            <button class="btn" id="ota-browse" type="button">Browse...</button>
+            <button class="btn" id="ota-install" type="button" disabled>Install</button>
+          </div>
+          <div class="progress sunken blocks" id="ota-progress" hidden><div class="progress-fill" id="ota-fill"></div></div>
+          <p class="small" id="ota-detail"></p>
+        </div>
+      </div>
+      <p class="small">Update files are built for one kind of board and are signed: the speaker refuses
+        anything else. Music keeps playing while it installs; the new version starts after a restart. If it
+        doesn't come up healthy within 5 minutes, the speaker goes back to the previous version by itself.</p>
     </fieldset>
   </div>
 </section>

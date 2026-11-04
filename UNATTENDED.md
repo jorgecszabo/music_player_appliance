@@ -258,3 +258,10 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
 - API use per its docs: mirrors discovered by resolving all.api.radio-browser.info and
   reverse-resolving the addresses (currently de1), next mirror on errors, descriptive
   User-Agent, `hidebroken`, clicks via `/json/url`, tag/country lists cached for a day.
+
+### Task 8: McPDM investigation (read-only part done)
+
+- No dynamic debug in our kernel; the McPDM IRQ counter showed the DN FIFO emptying on a
+  forced underrun while the link keeps running (details in PLAN.md's side quest). The patch
+  (DAI trigger that stops/mutes the link) needs a kernel build + boot test: left for a
+  supervised session.

@@ -263,6 +263,11 @@ Driver findings (`sound/soc/ti/omap-mcpdm.c`, 6.18):
   clocksource/clockevent (`32k_counter`, gptimer 32768 Hz; ~30 us timestamps for PipeWire's
   DLL), and/or no `.delay` reporting for the FIFO. Unverified.
 
+Evidence (2026-11-04, unattended): no `CONFIG_DYNAMIC_DEBUG` in our kernel, but the McPDM IRQ
+counter in `/proc/interrupts` (WUGEN 112) moves once per event: +1 when `aplay -D hw` starts,
+**+1 when a forced underrun (SIGSTOP on aplay) stops the DMA while the link keeps running**,
++1 at close. Consistent with the FIFO running dry on stop/underrun (no DAI trigger).
+
 Plan:
 1. Confirm: enable `omap_mcpdm` dynamic debug (check `CONFIG_DYNAMIC_DEBUG`; otherwise rebuild
    r3) and watch for "DN (playback) FIFO Empty" while the PCM is open and idle.

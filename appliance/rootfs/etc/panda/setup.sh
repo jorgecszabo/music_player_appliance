@@ -124,6 +124,18 @@ monitor.bluez.properties = {
   bluez5.hw-volume = [ a2dp_sink ]
 }
 
+# Receive side (phone -> us): a fixed jitter buffer. The automatic one starts at
+# about one quantum and only grows after it has seen a delay spike (forgetting
+# it after 2 min), so the BT 2.1 controller's bursty packet timing caused
+# occasional skips. 8192 samples = about 186 ms at 44.1 kHz: fine for music,
+# but video on the phone lags by that much.
+monitor.bluez.rules = [
+  {
+    matches = [ { node.name = "~bluez_input.*" } ]
+    actions = { update-props = { bluez5.decode-buffer.latency = 8192 } }
+  }
+]
+
 monitor.alsa.rules = [
   {
     # Only the board's audio output; ignore other cards (e.g. HDMI).

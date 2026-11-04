@@ -485,6 +485,10 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     start; event hook for the Phase 6 chimes.
   - **Works (2026-11-04):** POCO X8 Pro (Android) paired with the button, plays with **AAC**,
     phone volume buttons control the stream, 0 errors, about 6% CPU total, 63.5 C.
+  - **Occasional skips (2026-11-04):** the A2DP receive jitter buffer is automatic in PipeWire
+    1.6 (starts at about one quantum, grows only after a seen delay spike, forgets after 2 min),
+    and the BT 2.1 link is bursty. Fixed with `bluez5.decode-buffer.latency = 8192` (about
+    186 ms) on `bluez_input.*` nodes; costs video lip-sync on the phone.
   - **Power-cut test passed:** after pulling the plug the pairing loaded from the overlay, same
     controller address, and panda-bt reconnected to the phone by itself.
 

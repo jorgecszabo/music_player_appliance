@@ -16,7 +16,7 @@ echo "panda settings v1" > "$T/media/panda.apkovl.tar.gz"
 export PANDA_OTA_TEST=1 PANDA_OTA_MEDIA="$T/media" PANDA_OTA_BOARD_CONF="$BOARD_DIR/board.conf" \
     PANDA_OTA_KEYS="$PROJECT_DIR/keys" PANDA_OTA_CMDLINE_FILE="$T/cmdline" PANDA_OTA_CONFIRM_TIMEOUT=3
 ota() { python3 -I "$OTA" "$@"; }
-boot_slot() { echo "console=ttyS2 panda_slot=$1" > "$T/cmdline"; }
+boot_slot() { echo "console=${CONSOLE%%,*} panda_slot=$1" > "$T/cmdline"; }
 pass=0; fail=0
 ok() { echo "PASS: $*"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $*"; fail=$((fail + 1)); }

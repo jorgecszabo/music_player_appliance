@@ -52,7 +52,8 @@ if [ "$RESTART" = "--restart" ]; then
         rc-service panda-bt stop; rc-service speaker-arbiter stop; rc-service speaker-radio stop; rc-service speaker-shairport stop; rc-service speaker-soloist stop; rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
         rc-service panda-audio-init restart || exit 1
         rc-service speaker-pipewire start && rc-service speaker-wireplumber start || exit 1
-        rc-service speaker-soloist start || exit 1
+        # Soloist fails without an API key (set on the web page): not fatal.
+        rc-service speaker-soloist start || echo \"speaker-soloist did not start (no API key?); continuing\"
         rc-service speaker-shairport start || exit 1
         rc-service speaker-radio start || exit 1
         rc-service speaker-arbiter start || exit 1

@@ -123,6 +123,12 @@ TREBLE_DB=0
 MAX_VOLUME=${AUDIO_HW_VOLUME_MAX:-15}
 EOF
 fi
+# A cap above the board's maximum (board.conf corrected since) is lowered to it.
+cap=$(sed -n 's/^MAX_VOLUME=//p' /etc/panda/audio.conf)
+if [ -n "${AUDIO_HW_VOLUME_MAX:-}" ] && [ "${cap:-0}" -gt "$AUDIO_HW_VOLUME_MAX" ] 2>/dev/null; then
+	log "volume cap $cap is above the board maximum $AUDIO_HW_VOLUME_MAX: lowering it"
+	sed -i "s/^MAX_VOLUME=.*/MAX_VOLUME=$AUDIO_HW_VOLUME_MAX/" /etc/panda/audio.conf
+fi
 
 # --- Generated configs: PipeWire, tone filter, WirePlumber, shairport-sync, bluez,
 # watchdog (board quirks come from board.conf; see gen-configs.sh).

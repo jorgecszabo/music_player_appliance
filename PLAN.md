@@ -367,7 +367,15 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     `omap_rng` was a module, not loaded before the modloop. **Fix: `HW_RANDOM` and
     `HW_RANDOM_OMAP` built in** (kernel r1). Diagnosed with `scripts/serial-sysrq.py t`.
   - Added avahi + dbus so `panda.local` resolves (also needed for Spotify/AirPlay discovery).
-  - Still to do: boot, setup-alpine/lbu, power-yank test.
+  - **Boots to login (2026-11-03).** crng ready at 3.1 s; boot media `ro`; modloop mounted;
+    all services up; chrony synced; 26 MB RAM used; `cpu_thermal` reads (57 °C).
+    `thermal_zone1` is a phantom bq27000 "battery" from the HDQ/1-wire driver (harmless;
+    could drop `W1`/`HDQ_MASTER_OMAP`/`BATTERY_BQ27XXX` later).
+  - lbu had no `LBU_MEDIA` (an earlier generator edit lost the `lbu.conf` block), so the
+    first-boot commit failed. Now the first-boot script runs `setup-lbu mmcblk0p1` and
+    `setup-apkcache /media/mmcblk0p1/cache` itself. The live board was fixed by hand
+    and committed.
+  - Still to do: power-yank test.
 
 ### Project layout
 

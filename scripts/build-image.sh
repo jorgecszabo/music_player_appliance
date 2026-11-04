@@ -14,6 +14,10 @@ fi
 ls "$PROJECT_DIR"/packages/main/armv7/linux-pandaboard-*.apk >/dev/null \
     || { echo "build the kernel package first: scripts/build-package.sh linux-pandaboard"; exit 1; }
 mkdir -p "$PROJECT_DIR/build/image" "$PROJECT_DIR/build/mkimage-work"
+# mkimage keys the apkovl cache on a checksum of the generator, looked up relative
+# to its own scripts/ dir, where ours isn't, so the checksum never changes.
+# Always regenerate the overlay (it's quick).
+rm -rf "$PROJECT_DIR"/build/mkimage-work/apkovl_* "$PROJECT_DIR"/build/mkimage-work/image-*
 # Root's SSH keys for the image: this host's public keys unless already provided.
 if [ ! -s "$PROJECT_DIR/image/authorized_keys" ]; then
     cat ~/.ssh/*.pub > "$PROJECT_DIR/image/authorized_keys" 2>/dev/null || true

@@ -250,6 +250,20 @@ display, radio presets / alarm.
   onto the card's FAT partition is imported at boot and deleted.
 - Web page: "Network Connections" window (Ethernet status, Wi-Fi status with
   signal bars, scan list, connect dialog, preferred networks, adapter/country).
+- **Shared-chip power order (found 2026-11-04):** powering the WL1271's Wi-Fi
+  half up or down (WLAN_EN; even the driver's probe, which powers it on to read
+  the chip ID) while Bluetooth runs resets the chip under the BT firmware. HCI
+  commands then time out, and nothing short of cutting the power recovers it:
+  not a BT_EN toggle, not WLAN_EN low, not a warm reboot. The datasheet says
+  asserting either enable line performs a power-on reset. Not a driver bug: the
+  2012 kernels ran BT through TI-ST. Fix: `hci_uart` is blacklisted
+  (setup.sh, from board.conf `BT_DRIVER_AFTER_WIFI`), `panda-radio-init` brings
+  the onboard Wi-Fi up first (with its stable MAC) and then loads it, and
+  panda-wifi never takes that interface down. Verified: 180/180 HCI probes
+  during 20 scans, a panda-wifi restart, a warm reboot. Remaining risk: a
+  wlcore firmware-crash recovery power-cycles Wi-Fi and would take BT down.
+  Ruled out on the way: the TWL6030 32 kHz clock (PMIC CLK32KG state 0x55, on
+  for all groups, with BT dead), clock refcounting, the pinmux, the UART speed.
 - Caveats: the WL1271 is 2.4 GHz b/g/n only, WPA2 only in practice, and shares
   its antenna with Bluetooth (A2DP + busy Wi-Fi both suffer): a 5 GHz USB
   adapter is the better choice. No WEP, no WPA-Enterprise.

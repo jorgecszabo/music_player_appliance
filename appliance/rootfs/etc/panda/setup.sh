@@ -157,6 +157,15 @@ for d in /var/lib/bluetooth/*/cache; do
 	grep -qx -- "-${d#/}" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu exclude "$d"
 done
 
+# --- Combo Wi-Fi/BT chip: Wi-Fi powers up first (see /etc/init.d/panda-radio-init) ----
+if [ -n "${BT_DRIVER_AFTER_WIFI:-}" ]; then
+	echo "# Loaded by panda-radio-init after the onboard Wi-Fi is up (shared chip)." > /etc/modprobe.d/panda-radio.conf
+	echo "blacklist $BT_DRIVER_AFTER_WIFI" >> /etc/modprobe.d/panda-radio.conf
+else
+	rm -f /etc/modprobe.d/panda-radio.conf
+fi
+rm -f /etc/modprobe.d/panda-wifi-test.conf /etc/modprobe.d/panda-bt-test.conf
+
 # --- Wi-Fi: panda-wifi runs wpa_supplicant itself (see /etc/panda/panda-wifi.py) -----
 rc-update del wpa_supplicant boot >/dev/null 2>&1 || true
 rc-update del wpa_supplicant default >/dev/null 2>&1 || true
@@ -212,7 +221,7 @@ if [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ]; then
 fi
 sysctl -q -p /etc/sysctl.d/90-panda.conf || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport speaker-radio speaker-arbiter bluetooth panda-bt panda-wifi panda-chime-boot panda-web crond; do
+	speaker-shairport speaker-radio speaker-arbiter panda-radio-init bluetooth panda-bt panda-wifi panda-chime-boot panda-web crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

@@ -1,0 +1,54 @@
+#!/sbin/openrc-run
+# Power-up order for a combo Wi-Fi/Bluetooth chip (board.conf BT_DRIVER_AFTER_WIFI).
+#
+# On the PandaBoard's WL1271, powering the Wi-Fi half up or down (WLAN_EN) while
+# Bluetooth is running resets the chip under the BT firmware: Bluetooth stops
+# answering, and only cutting the power brings it back. So: the BT driver is
+# blacklisted from autoloading (/etc/modprobe.d/panda-radio.conf, from
+# setup.sh); this brings the onboard Wi-Fi interface up first (and it then
+# stays up for good: panda-wifi never takes it down), and only then loads the
+# BT driver. If there's no onboard Wi-Fi interface after 20 s, BT loads anyway.
+
+description="Power up the onboard Wi-Fi before Bluetooth (shared chip)"
+
+depend() {
+	need localmount
+	after modules hwdrivers udev-settle
+	before bluetooth panda-bt panda-wifi
+}
+
+onboard_wifi() {
+	for n in /sys/class/net/*; do
+		[ -e "$n/phy80211" ] || continue
+		readlink -f "$n/device" | grep -q /usb && continue
+		echo "${n##*/}"
+		return 0
+	done
+	return 1
+}
+
+# Locally administered MAC from another interface's (as panda-wifi does).
+derived_mac() {
+	m=$(cat /sys/class/net/"$1"/address 2>/dev/null) || return 1
+	case "$m" in ""|00:00:00:00:00:00) return 1 ;; esac
+	set -- $(echo "$m" | tr ':' ' ')
+	printf '%02x:%s:%s:%s:%s:%02x\n' $(( (0x$1 | 0x02) & 0xfe )) "$2" "$3" "$4" "$5" $(( 0x$6 ^ 0x01 ))
+}
+
+start() {
+	. /etc/panda/board.conf
+	[ -n "${BT_DRIVER_AFTER_WIFI:-}" ] || return 0
+	ebegin "Powering up the onboard Wi-Fi before Bluetooth"
+	i=0; ifc=""
+	while [ $i -lt 40 ] && ! ifc=$(onboard_wifi); do sleep 0.5; i=$((i + 1)); done
+	if [ -n "$ifc" ]; then
+		if [ -n "${WIFI_MAC_FROM:-}" ] && mac=$(derived_mac "$WIFI_MAC_FROM"); then
+			ip link set "$ifc" address "$mac" 2>/dev/null
+		fi
+		ip link set "$ifc" up || ewarn "$ifc didn't come up"
+	else
+		ewarn "no onboard Wi-Fi interface; loading Bluetooth anyway"
+	fi
+	modprobe "$BT_DRIVER_AFTER_WIFI"
+	eend $?
+}

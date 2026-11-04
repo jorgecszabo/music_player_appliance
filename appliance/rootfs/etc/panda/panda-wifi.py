@@ -428,18 +428,28 @@ class Wifi:
             if self.iface:
                 log("stopped on", self.iface)
                 sh("ip", "addr", "flush", "dev", self.iface)
-                sh("ip", "link", "set", self.iface, "down")
+                if not self.keep_up(self.iface):
+                    sh("ip", "link", "set", self.iface, "down")
             self.dhcp = self.wpa = None
             self.dhcp_ssid = None
             self.iface = None
             self.results = []
             self.gen += 1
 
+    def keep_up(self, name):
+        """Onboard interface of a combo chip whose Bluetooth dies when Wi-Fi powers
+        up or down (board.conf BT_DRIVER_AFTER_WIFI): never take it down."""
+        if not self.board.get("BT_DRIVER_AFTER_WIFI"):
+            return False
+        return any(a["name"] == name and a["kind"] == "onboard" for a in adapters(self.board))
+
     def start_iface(self, ad):
         name = ad["name"]
         unblock(ad["phy"])
         src = self.board.get("WIFI_MAC_FROM", "")
-        if ad["kind"] == "onboard" and src:
+        # A shared-chip onboard interface is never taken down (that would kill
+        # Bluetooth); panda-radio-init already set its MAC before bringing it up.
+        if ad["kind"] == "onboard" and src and not self.keep_up(name):
             mac = stable_mac(src)
             if mac and ad["mac"] != mac:
                 sh("ip", "link", "set", name, "down")

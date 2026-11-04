@@ -519,9 +519,12 @@ def cmd_boot():
     open(run_dir + "/ota-rollback", "w").write("1\n")
     if restore:
         log("settings restored from before the update; rebooting once")
-        run_root(["reboot"])
-        # Don't let the boot go on: later services (panda-setup) would lbu-commit the
-        # settings loaded at this boot over the restored ones before the reboot.
+        # Immediately (-f, no shutdown sequence): busybox init only acts on a plain
+        # "reboot" once the boot runlevel is done, and by then panda-setup would have
+        # lbu-committed the settings loaded at this boot over the restored ones. Safe:
+        # the root is in RAM and the boot medium is read-only again.
+        os.sync()
+        run_root(["reboot", "-f"])
         if not TEST:
             time.sleep(600)
 

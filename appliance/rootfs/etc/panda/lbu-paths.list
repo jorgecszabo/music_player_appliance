@@ -1,3 +1,5 @@
+# lbu rules (apk protected paths), installed by setup.sh as
+# /etc/apk/protected_paths.d/panda.list: settings are saved, generated configs are not.
 +var/lib/bluetooth
 +var/lib/panda-web/radio-favorites.json
 -etc/pipewire/pipewire.conf.d/10-panda.conf

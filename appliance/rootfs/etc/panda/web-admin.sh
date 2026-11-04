@@ -18,6 +18,10 @@
 #   web-admin.sh factory-reset-dry   only show what a factory reset would do
 #   web-admin.sh set-master <0..1>   remember the master volume (audio.conf; restored at
 #                                    boot by audio-route.py --master; not applied here)
+#   web-admin.sh ota-status          update slots (JSON, panda-ota.py status)
+#   web-admin.sh ota-install         an update bundle on stdin -> the standby slot
+#                                    (JSON lines; verified by panda-ota.py)
+#   web-admin.sh ota-activate <a|b>  boot that slot on trial, then reboot
 #   web-admin.sh set-audio <bass dB> <treble dB> <cap step> <onboard|usb> <usb cap dB> <usb mode>
 #                                    tone, volume caps, output: audio.conf, applied live
 set -eu
@@ -150,6 +154,16 @@ set-master)
 		echo "MASTER_VOLUME=$v" >> "$f"
 	fi
 	echo ok ;;
+ota-status)
+	python3 /etc/panda/panda-ota.py status ;;
+ota-install)
+	logger -t panda-web "update upload started"
+	exec python3 /etc/panda/panda-ota.py install ;;
+ota-activate)
+	case "${2:-}" in a|b) ;; *) die "slot must be a or b" ;; esac
+	python3 /etc/panda/panda-ota.py activate "$2" || exit 1
+	logger -t panda-web "switching to update slot $2; rebooting"
+	bg sh -c 'sleep 2; reboot' ;;
 soloist-key-status)
 	f=/etc/panda/soloist.key
 	if [ -s "$f" ]; then echo "set $(date -r "$f" -u +%Y-%m-%dT%H:%M:%SZ)"; else echo missing; fi ;;

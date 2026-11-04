@@ -306,3 +306,18 @@ installation is acceptable. If the board doesn't come back (no serial access fro
 `/dev/ttyUSB0` needs group dialout), stop and ask the owner to reflash it.
 
 ## Results log (session 2)
+
+- **Slot boot works** (`alpine_repo=` + `modloop=` from `slots/<x>`; extlinux lists both
+  slots). The first reboot after the switch didn't come back: the owner power-cycled. Per the
+  owner, the xM's Ethernet sometimes fails to come up after a reboot (board-specific, left
+  alone); warm reboots otherwise work (~170 s).
+- `panda-appliance` package + settings-only overlay + panda-setup; image with `slots/a`;
+  `build-ota.sh` (109 MiB bundle for the xM); `test-ota.sh`: 20 host tests pass (bad
+  signature/checksum/board/truncation rejected, trial, confirm, failed trial + settings restore).
+- **First real OTA on the xM:** the old system was described as slot a, the bundle streamed
+  over SSH into slot b (92 s), activated, the overlay converted once by hand (new factory
+  overlay + this board's settings), rebooted: slot b on trial, rollback armed, confirmed by the
+  health check after 60 s, default switched to b. All services run.
+- Found: `apk audit` reports everything under `etc/apk/` as added, so lbu rules shipped
+  there would be saved and shadow later versions; now copied from `/etc/panda/lbu-paths.list`
+  at every boot.

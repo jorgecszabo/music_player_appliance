@@ -29,6 +29,12 @@ done
 # shared by both slots would mix versions.
 [ -L /etc/apk/cache ] && rm -f /etc/apk/cache
 
+# --- What lbu saves: settings only (rules in /etc/panda/lbu-paths.list). Copied
+# every boot: apk audit reports everything under etc/apk/ as changed, so a file
+# shipped there would always land in the overlay and shadow later versions.
+mkdir -p /etc/apk/protected_paths.d
+grep -v "^#" /etc/panda/lbu-paths.list > /etc/apk/protected_paths.d/panda.list
+
 # --- Overlays from before the package split: code that would shadow the package ---
 # Older overlays saved the appliance's init scripts explicitly; drop those lines.
 if [ -f /etc/apk/protected_paths.d/lbu.list ]; then

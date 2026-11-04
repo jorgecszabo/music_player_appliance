@@ -520,6 +520,10 @@ def cmd_boot():
     if restore:
         log("settings restored from before the update; rebooting once")
         run_root(["reboot"])
+        # Don't let the boot go on: later services (panda-setup) would lbu-commit the
+        # settings loaded at this boot over the restored ones before the reboot.
+        if not TEST:
+            time.sleep(600)
 
 
 def healthy():

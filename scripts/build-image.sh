@@ -20,17 +20,22 @@ if [ ! -s "$PROJECT_DIR/image/authorized_keys" ]; then
 fi
 echo "authorized_keys: $(grep -c . "$PROJECT_DIR/image/authorized_keys" 2>/dev/null || echo 0) key(s)"
 
-ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
-    cp /root/.abuild/*.rsa.pub /etc/apk/keys/
-    apk update -q
-    mkdir -p /root/.mkimage && cp /work/image/* /root/.mkimage/
-    . /root/.abuild/abuild.conf; export PACKAGER_PRIVKEY
-    cd /work/build/src/aports/scripts
-    sh mkimage.sh --tag '$TAG' --arch armv7 --profile pandaboard --hostkeys \
-        --workdir /work/build/mkimage-work --outdir /work/build/image \
-        --repository /work/packages/main \
-        --repository https://dl-cdn.alpinelinux.org/alpine/v$ALPINE_VERSION/main \
-        --repository https://dl-cdn.alpinelinux.org/alpine/v$ALPINE_VERSION/community
+# mkimage passes apk --usermode, which refuses root. So the root step only
+# installs our signing key into the container's /etc/apk/keys, then mkimage
+# runs as "builder" (= host user via keep-id).
+ALPINE_ROOT=keepid "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
+    cp /home/builder/.abuild/*.rsa.pub /etc/apk/keys/
+    su builder -s /bin/sh -c '
+        set -eu
+        mkdir -p ~/.mkimage && cp /work/image/* ~/.mkimage/
+        . ~/.abuild/abuild.conf; export PACKAGER_PRIVKEY
+        cd /work/build/src/aports/scripts
+        sh mkimage.sh --tag $TAG --arch armv7 --profile pandaboard --hostkeys \
+            --workdir /work/build/mkimage-work --outdir /work/build/image \
+            --repository /work/packages/main \
+            --repository https://dl-cdn.alpinelinux.org/alpine/v$ALPINE_VERSION/main \
+            --repository https://dl-cdn.alpinelinux.org/alpine/v$ALPINE_VERSION/community
+    '
 "
 IMG="$PROJECT_DIR/build/image/alpine-pandaboard-$TAG-armv7.tar.gz"
 rm -rf "$PROJECT_DIR/build/sdimage"; mkdir -p "$PROJECT_DIR/build/sdimage"

@@ -5,11 +5,14 @@
 # and locks out any container that is already running.
 # ALPINE_ROOT=1 runs as container root instead (sudo can't work under qemu-user;
 # in rootless podman, container root maps to the host user anyway).
+# ALPINE_ROOT=keepid runs as container root but keeps the keep-id mapping, so a
+# root step can be followed by `su builder` and files still belong to the host user.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 tty_flag=(); [ -t 0 ] && tty_flag=(-it)
 user_flags=(--userns=keep-id)
 [ "${ALPINE_ROOT:-0}" = 1 ] && user_flags=(--user 0)
+[ "${ALPINE_ROOT:-0}" = keepid ] && user_flags=(--userns=keep-id --user 0)
 exec podman run --rm "${tty_flag[@]}" --platform linux/arm/v7 \
     "${user_flags[@]}" \
     -v "$PROJECT_DIR:/work:z" \

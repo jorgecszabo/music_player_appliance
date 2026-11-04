@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# Bluetooth speaker control: pairing agent, pairing button S2, LED, reconnect.
+# See /etc/panda/panda-bt.py. Runs as root (lbu commit after pairing, LEDs).
+
+description="Bluetooth pairing button, agent and reconnect"
+supervisor=supervise-daemon
+command=/usr/bin/python3
+command_args="/etc/panda/panda-bt.py"
+output_log=/var/log/panda-bt.log
+error_log=/var/log/panda-bt.log
+respawn_delay=3
+respawn_max=0
+
+depend() {
+	need bluetooth dbus
+	after speaker-wireplumber
+}

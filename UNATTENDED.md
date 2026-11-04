@@ -138,7 +138,9 @@ tasks are committed.
 ## Results log
 
 **Reminder for the end of the night:** the volume cap is at step 0 (-30 dB) for quiet testing.
-Set it back to 15 (0 dB) before finishing (web-admin.sh set-audio 0 0 15).
+Set it back to 15 (0 dB) before finishing, keeping the owner's tone settings: the owner set
+**bass +10 dB** from their phone (192.168.0.105) during the night; I reset it by mistake while
+chasing a "phantom" change and restored it (web-admin.sh set-audio 10 0 15 at the end).
 
 ### Task 1: AirPlay (done)
 

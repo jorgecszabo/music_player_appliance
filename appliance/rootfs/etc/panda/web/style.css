@@ -363,6 +363,29 @@ table.props td { padding: 4px 0; overflow-wrap: anywhere; }
   font-size: 12px;
 }
 
+/* --- Radio tuner --------------------------------------------------------------- */
+.tuner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: linear-gradient(#2b1d0e, #4a3317);
+  color: #ffb84d;
+  font: bold 13px var(--mono);
+  text-shadow: 0 0 4px rgba(255, 170, 60, .6);
+}
+.tuner-led { width: 10px; height: 10px; border-radius: 50%; background: #3a1d00; flex: none; }
+.tuner-led.on { background: #ff3b1f; box-shadow: 0 0 6px #ff3b1f; animation: blink 1.2s steps(1) infinite; }
+.tuner-text { flex: 1; min-width: 0; }
+.tuner-station, .tuner-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tuner-title { font-weight: normal; font-size: 12px; color: #ffd9a0; }
+.radio-form { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 10px; font-size: 12px; }
+.radio-form label { display: inline-flex; align-items: center; gap: 4px; }
+.field.short { width: 90px; }
+.field.tiny { width: 40px; text-transform: uppercase; }
+.fav { background: none; border: 0; cursor: pointer; font-size: 15px; color: var(--shadow); padding: 0 2px; }
+.fav.on { color: #e0a000; text-shadow: 1px 1px 0 #000; }
+tr.playing td { background: #000080; color: #fff; }
+tr.playing .st-dim { color: #ccc; }
+
 /* --- Bluetooth ----------------------------------------------------------------- */
 .pair-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .pair-row > div { flex: 1; min-width: 200px; }

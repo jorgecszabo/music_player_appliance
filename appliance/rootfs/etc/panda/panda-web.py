@@ -16,6 +16,9 @@ firewall redirects port 80 to it. LAN only (firewall).
   POST /api/name             {"name": <speaker name>}
   POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
   POST /api/audio            {"bass": dB, "treble": dB, "cap": step}  (saved after 15 s)
+  GET  /api/radio/search     ?q=&tag=&country=&order=votes|clickcount|name  (radio-browser.info)
+  GET  /api/radio/favorites
+  POST /api/radio            {"cmd": "play", "uuid"} | {"cmd": "stop"} | {"cmd": "fav", "uuid", "add": bool}
 
 Privileged actions run /etc/panda/web-admin.sh through doas (it validates).
 Protections: Host header must name this device (DNS rebinding), and POSTs need
@@ -41,11 +44,12 @@ ADMIN = ["doas", "-n", "/etc/panda/web-admin.sh"]
 PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
 BT_SOCK = "/run/panda/bt.sock"
 SERVICES = ["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-wireplumber",
-            "speaker-soloist", "speaker-shairport", "bluetooth", "panda-bt", "avahi-daemon",
+            "speaker-soloist", "speaker-shairport", "speaker-radio", "speaker-arbiter", "bluetooth",
+            "panda-bt", "avahi-daemon",
             "chronyd", "sshd", "crond", "panda-web"]
-RESTARTABLE = {"speaker-soloist", "speaker-shairport", "panda-bt", "bluetooth",
+RESTARTABLE = {"speaker-soloist", "speaker-shairport", "speaker-radio", "panda-bt", "bluetooth",
                "avahi-daemon", "chronyd"}
-LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "panda-bt", "panda-web",
+LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "radio", "panda-bt", "panda-web",
         "panda-web-admin", "messages"]
 
 
@@ -93,6 +97,100 @@ def bt_call(req, timeout=5):
         return json.loads(buf)
     except (OSError, ValueError) as e:
         return {"error": f"panda-bt unavailable ({e.__class__.__name__})"}
+
+
+# --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
+RADIO_API = "https://all.api.radio-browser.info"
+RADIO_UA = "PandaSpeaker/1.0 (PandaBoard Alpine speaker; panda-web)"
+MPV_SOCK = "/run/speaker/radio.sock"
+FAVORITES = "/var/lib/panda-web/radio-favorites.json"
+STATION_FIELDS = ("stationuuid", "name", "codec", "bitrate", "countrycode", "tags", "votes",
+                  "clickcount", "hls")
+RADIO = {"station": None}
+_radio_cache = {}
+
+
+def rb_get(path, params=None, timeout=10):
+    import urllib.parse
+    import urllib.request
+    url = RADIO_API + path + ("?" + urllib.parse.urlencode(params) if params else "")
+    hit = _radio_cache.get(url)
+    if hit and time.monotonic() - hit[0] < 300 and not path.startswith("/json/url/"):
+        return hit[1]
+    req = urllib.request.Request(url, headers={"User-Agent": RADIO_UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read(4 * 1024 * 1024))
+    _radio_cache[url] = (time.monotonic(), data)
+    if len(_radio_cache) > 200:
+        _radio_cache.clear()
+    return data
+
+
+def station_summary(st):
+    out = {k: st.get(k) for k in STATION_FIELDS}
+    out["name"] = str(out.get("name") or "").strip()[:120]
+    out["tags"] = str(out.get("tags") or "")[:200]
+    return out
+
+
+def mpv(*cmd, timeout=3):
+    """Send one command to mpv's JSON IPC; return its "data" (None on error)."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect(MPV_SOCK)
+            s.sendall(json.dumps({"command": list(cmd), "request_id": 1}).encode() + b"\n")
+            buf = b""
+            while True:
+                chunk = s.recv(65536)
+                if not chunk:
+                    return None
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    try:
+                        msg = json.loads(line)
+                    except ValueError:
+                        continue
+                    if msg.get("request_id") == 1:
+                        return msg.get("data") if msg.get("error") == "success" else None
+    except OSError:
+        return None
+
+
+def radio_status():
+    idle = mpv("get_property", "idle-active")
+    if idle is None:
+        return {"available": False}
+    st = RADIO["station"]
+    if idle:
+        return {"available": True, "playing": False, "station": st}
+    meta = mpv("get_property", "metadata") or {}
+    title = meta.get("icy-title") or meta.get("StreamTitle") or ""
+    params = mpv("get_property", "audio-params") or {}
+    return {"available": True, "playing": True, "station": st,
+            "title": str(title)[:200],
+            "codec": mpv("get_property", "audio-codec-name") or "",
+            "bitrate": mpv("get_property", "audio-bitrate"),
+            "rate": params.get("samplerate"),
+            "buffering": bool(mpv("get_property", "paused-for-cache"))}
+
+
+def load_favorites():
+    try:
+        with open(FAVORITES) as f:
+            favs = json.load(f)
+        return [station_summary(s) for s in favs if isinstance(s, dict)][:100]
+    except (OSError, ValueError):
+        return []
+
+
+def save_favorites(favs):
+    tmp = FAVORITES + ".new"
+    with open(tmp, "w") as f:
+        json.dump(favs, f)
+    os.replace(tmp, FAVORITES)
+    schedule_save()
 
 
 # --- status collection ----------------------------------------------------------------
@@ -193,6 +291,8 @@ class Collector:
             "sync": self.slow.get("sync"),
             "lbu": self.slow.get("lbu"),
             "tone": self.tone(board),
+            "radio": radio_status(),
+            "nowplaying": self.nowplaying(),
             "spotify": self.slow.get("spotify"),
         }
 
@@ -267,6 +367,13 @@ class Collector:
         return {"reference": info.get("Reference ID", ""), "stratum": info.get("Stratum", ""),
                 "offset": info.get("System time", ""), "leap": info.get("Leap status", ""),
                 "raw": out.strip() if not info else ""}
+
+    def nowplaying(self):
+        try:
+            with open("/run/speaker/nowplaying.json") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
 
     def tone(self, board):
         a = shell_conf("/etc/panda/audio.conf")
@@ -345,10 +452,12 @@ class Collector:
                     node["source"] = "Bluetooth"
                     node["codec"] = props.get("api.bluez5.codec", "")
                     node["device"] = props.get("node.description") or props.get("api.bluez5.address", "")
-                elif "shairport" in n.lower() or "shairport" in app.lower():
+                elif n == "airplay" or "shairport" in n.lower() or "shairport" in app.lower():
                     node["source"] = "AirPlay"
                 elif n == "spotify" or "spotify" in app.lower() or "soloist" in app.lower():
                     node["source"] = "Spotify"
+                elif n == "radio" or app.lower() == "radio":
+                    node["source"] = "Radio"
                 else:
                     node["source"] = app or n
                 streams.append(node)
@@ -468,6 +577,25 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(snap)
         elif url.path == "/api/events":
             self.events()
+        elif url.path == "/api/radio/search":
+            q = parse_qs(url.query)
+            arg = lambda k: (q.get(k, [""])[0] or "").strip()[:60]
+            order = arg("order") if arg("order") in ("votes", "clickcount", "name") else "votes"
+            params = {"limit": 40, "hidebroken": "true", "order": order,
+                      "reverse": "false" if order == "name" else "true"}
+            if arg("q"):
+                params["name"] = arg("q")
+            if arg("tag"):
+                params["tag"] = arg("tag").lower()
+            if re.fullmatch(r"[A-Za-z]{2}", arg("country")):
+                params["countrycode"] = arg("country").upper()
+            try:
+                res = rb_get("/json/stations/search", params)
+                self.send_json({"stations": [station_summary(s) for s in res if isinstance(s, dict)]})
+            except Exception as e:
+                self.send_json({"error": f"radio-browser.info: {e.__class__.__name__}"}, 502)
+        elif url.path == "/api/radio/favorites":
+            self.send_json({"stations": load_favorites()})
         elif url.path == "/api/logs":
             name = parse_qs(url.query).get("name", [""])[0]
             if name not in LOGS:
@@ -513,7 +641,7 @@ class Handler(BaseHTTPRequestHandler):
         handler = {"/api/volume": self.volume, "/api/bt": self.bt,
                    "/api/service": self.service, "/api/system": self.system,
                    "/api/name": self.name, "/api/spotify-key": self.spotify_key,
-                   "/api/audio": self.audio_settings}.get(path)
+                   "/api/audio": self.audio_settings, "/api/radio": self.radio}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -575,6 +703,38 @@ class Handler(BaseHTTPRequestHandler):
         out = run(ADMIN + ["set-name", name], timeout=15)
         return {"ok": bool(out.strip()), "result": out.strip()}
 
+
+    def radio(self, req):
+        cmd = req.get("cmd")
+        if cmd == "stop":
+            mpv("stop")
+            return {"ok": True}
+        uuid = str(req.get("uuid", ""))
+        if not re.fullmatch(r"[0-9a-fA-F-]{36}", uuid):
+            raise ValueError("bad station id")
+        if cmd == "fav":
+            favs = [f for f in load_favorites() if f.get("stationuuid") != uuid]
+            if req.get("add"):
+                st = rb_get(f"/json/stations/byuuid/{uuid}")
+                if not st:
+                    raise ValueError("unknown station")
+                favs.append(station_summary(st[0]))
+            save_favorites(favs)
+            return {"ok": True, "stations": favs}
+        if cmd == "play":
+            st = rb_get(f"/json/stations/byuuid/{uuid}")
+            if not st:
+                raise ValueError("unknown station")
+            # /json/url/<uuid> counts a click (as the API asks) and gives the URL.
+            res = rb_get(f"/json/url/{uuid}")
+            stream = (res or {}).get("url") or st[0].get("url_resolved") or st[0].get("url") or ""
+            if not re.match(r"^https?://", stream):
+                raise ValueError("station has no http(s) stream")
+            if mpv("loadfile", stream, "replace", timeout=5) is None and mpv("get_property", "idle-active") is None:
+                raise ValueError("the radio player isn't running")
+            RADIO["station"] = station_summary(st[0])
+            return {"ok": True, "station": RADIO["station"]}
+        raise ValueError("unknown command")
 
     def audio_settings(self, req):
         try:

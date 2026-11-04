@@ -56,6 +56,19 @@ def soloist_ctl(*args, timeout=10):
         return ""
 
 
+def mpv_command(*cmd):
+    """One command over mpv's JSON IPC socket (speaker-radio)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_UNIX) as s:
+            s.settimeout(3)
+            s.connect("/run/speaker/radio.sock")
+            s.sendall(json.dumps({"command": list(cmd)}).encode() + b"\n")
+            s.recv(4096)
+    except OSError as e:
+        log("mpv:", e)
+
+
 def source_of(props):
     name = props.get("node.name", "")
     app = (props.get("application.name") or "").lower()
@@ -65,6 +78,8 @@ def source_of(props):
         return "AirPlay"
     if name == "spotify" or "spotify" in app or "soloist" in app:
         return "Spotify"
+    if name == "radio" or app == "radio":
+        return "Radio"
     return props.get("application.name") or name
 
 
@@ -216,6 +231,8 @@ class Arbiter:
         src = s["source"]
         if src == "Spotify":
             soloist_ctl("pause")
+        elif src == "Radio":
+            mpv_command("stop")
         elif src == "Bluetooth":
             self.bt_pause(s["props"].get("api.bluez5.address", ""))
         else:

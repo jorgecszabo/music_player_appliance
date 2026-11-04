@@ -23,8 +23,9 @@
   <div class="window-body">
     <ul class="nav">
       <li><a href="#now-playing">Now Playing</a></li>
+      <li><a href="#radio">Radio</a> <span class="new">NEW!</span></li>
       <li><a href="#volume">Volume</a></li>
-      <li><a href="#bluetooth">Bluetooth</a> <span class="new">NEW!</span></li>
+      <li><a href="#bluetooth">Bluetooth</a></li>
       <li><a href="#system">System</a></li>
       <li><a href="#services">Services</a></li>
       <li><a href="#logs">Logs</a></li>
@@ -65,6 +66,37 @@
     <table class="grid" id="streams">
       <thead><tr><th>Source</th><th>Format</th><th>State</th><th>Xruns</th></tr></thead>
       <tbody><tr><td colspan="4" class="center">Nothing is playing. Pick &quot;<span class="sn">Panda</span>&quot; in Spotify, AirPlay or Bluetooth.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="window" id="radio">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128251;</span><span class="title-text">Radio Tuner - powered by radio-browser.info</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <div class="tuner sunken">
+      <span class="tuner-led" id="radio-led" aria-hidden="true"></span>
+      <div class="tuner-text">
+        <div class="tuner-station" id="radio-station">Radio off</div>
+        <div class="tuner-title" id="radio-title">Pick a station below.</div>
+      </div>
+      <button class="btn" id="radio-stop" type="button" disabled>Stop</button>
+    </div>
+    <form id="radio-form" class="radio-form">
+      <label>Name <input type="text" class="field" id="radio-q" maxlength="60" placeholder="e.g. jazz fm"></label>
+      <label>Genre <input type="text" class="field short" id="radio-tag" maxlength="40" placeholder="rock"></label>
+      <label>Country <input type="text" class="field tiny" id="radio-country" maxlength="2" placeholder="AR"></label>
+      <label>Sort <select id="radio-order"><option value="votes">Votes</option><option value="clickcount">Popular</option><option value="name">Name</option></select></label>
+      <button class="btn" type="submit">Search</button>
+    </form>
+    <div class="button-row left">
+      <button class="btn" type="button" id="radio-top">Top voted</button>
+      <button class="btn" type="button" id="radio-popular">Popular now</button>
+      <button class="btn" type="button" id="radio-favs">&#9733; Favorites</button>
+      <span class="small" id="radio-status"></span>
+    </div>
+    <table class="grid" id="radio-results">
+      <thead><tr><th title="Favorite">&#9733;</th><th>Station</th><th class="hide-narrow">Country</th><th>Format</th><th class="hide-narrow">Tags</th><th></th></tr></thead>
+      <tbody><tr><td colspan="6" class="center">Search for a station, or press Top voted.</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -162,7 +194,7 @@
     <div class="button-row left">
       <label for="log-name">Log:</label>
       <select id="log-name">
-        <option>soloist</option><option>shairport</option><option>arbiter</option><option>panda-bt</option>
+        <option>soloist</option><option>shairport</option><option>radio</option><option>arbiter</option><option>panda-bt</option>
         <option>pipewire</option><option>wireplumber</option><option>panda-web</option>
         <option>panda-web-admin</option><option>messages</option>
       </select>

@@ -98,6 +98,95 @@ function render(s) {
   renderSave(s);
   renderSpotify(s);
   renderTone(s);
+  renderRadio(s);
+}
+
+// --- radio ------------------------------------------------------------------------
+let radioList = [];       // stations shown in the table
+let radioFavs = new Set();
+
+function renderRadio(s) {
+  const r = s.radio || {};
+  const on = !!r.playing;
+  $("radio-led").classList.toggle("on", on);
+  $("radio-stop").disabled = !on;
+  if (!r.available) {
+    setText("radio-station", "Radio player not running");
+    setText("radio-title", "Check the speaker-radio service.");
+  } else if (on) {
+    setText("radio-station", (r.station && r.station.name) || "Radio");
+    const fmt = [r.codec && r.codec.toUpperCase(), r.bitrate ? `${Math.round(r.bitrate / 1000)} kbps` : null,
+      r.rate ? kHz(r.rate) : null].filter(Boolean).join(" / ");
+    setText("radio-title", r.buffering ? "Buffering..." : (r.title || fmt || "Playing"));
+  } else {
+    setText("radio-station", "Radio off");
+    setText("radio-title", "Pick a station below.");
+  }
+  const cur = on && r.station ? r.station.stationuuid : null;
+  for (const tr of $("radio-results").tBodies[0].rows) tr.classList.toggle("playing", !!cur && tr.dataset.uuid === cur);
+}
+
+function drawStations(list, emptyText) {
+  radioList = list;
+  const tbody = $("radio-results").tBodies[0];
+  tbody.replaceChildren();
+  if (!list.length) {
+    tbody.append(el("tr", {}, el("td", { colspan: 6, class: "center" }, emptyText)));
+    return;
+  }
+  for (const st of list) {
+    const fav = el("button", { class: `fav${radioFavs.has(st.stationuuid) ? " on" : ""}`, type: "button",
+      title: "Favorite", "aria-label": `Favorite ${st.name}` }, "\u2605");
+    fav.addEventListener("click", async () => {
+      const add = !radioFavs.has(st.stationuuid);
+      try {
+        const r = await post("/api/radio", { cmd: "fav", uuid: st.stationuuid, add });
+        radioFavs = new Set(r.stations.map((x) => x.stationuuid));
+        fav.classList.toggle("on", add);
+      } catch (e) { oops(e); }
+    });
+    const play = el("button", { class: "btn", type: "button" }, "Play");
+    play.addEventListener("click", async () => {
+      play.disabled = true;
+      setText("radio-status", `Tuning in to ${st.name}...`);
+      try { await post("/api/radio", { cmd: "play", uuid: st.stationuuid }); setText("radio-status", ""); }
+      catch (e) { setText("radio-status", ""); oops(e); }
+      play.disabled = false;
+    });
+    const fmt = [st.codec, st.bitrate ? `${st.bitrate}k` : null].filter(Boolean).join(" ");
+    const tr = el("tr", {},
+      el("td", {}, fav),
+      el("td", {}, el("b", {}, st.name || "(no name)")),
+      el("td", { class: "hide-narrow" }, st.countrycode || ""),
+      el("td", {}, fmt || "-"),
+      el("td", { class: "hide-narrow small" }, (st.tags || "").split(",").slice(0, 4).join(", ")),
+      el("td", {}, play));
+    tr.dataset.uuid = st.stationuuid;
+    tbody.append(tr);
+  }
+  if (last) renderRadio(last);
+}
+
+async function radioSearch(params) {
+  setText("radio-status", "Searching...");
+  try {
+    const r = await fetch(`/api/radio/search?${new URLSearchParams(params)}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    drawStations(d.stations, "No stations found. Try another search!");
+    setText("radio-status", `${d.stations.length} station(s)`);
+  } catch (e) { setText("radio-status", ""); oops(e); }
+}
+
+async function radioFavorites(show) {
+  try {
+    const d = await (await fetch("/api/radio/favorites")).json();
+    radioFavs = new Set(d.stations.map((x) => x.stationuuid));
+    if (show) {
+      drawStations(d.stations, "No favorites yet. Click the star next to a station.");
+      setText("radio-status", `${d.stations.length} favorite(s)`);
+    }
+  } catch (e) { if (show) oops(e); }
 }
 
 function capDb(t, step) { return (step - t.cap_max) * t.cap_step_db; }
@@ -153,9 +242,17 @@ function renderNowPlaying(s) {
 
   let title = `*** ${(s.host.speaker_name || "PANDA").toUpperCase()} AMP *** IDLE ***`;
   if (act) {
-    title = act.source === "Bluetooth" && track && track.title
-      ? `${track.artist ? track.artist + " - " : ""}${track.title}`
-      : `${act.source}${act.device ? " - " + act.device : ""}`;
+    const np = (s.nowplaying || {})[act.source];
+    const r = s.radio || {};
+    if (act.source === "Bluetooth" && track && track.title) {
+      title = `${track.artist ? track.artist + " - " : ""}${track.title}`;
+    } else if (act.source === "Radio" && r.station) {
+      title = `${r.station.name}${r.title ? " - " + r.title : ""}`;
+    } else if (np && np.title) {
+      title = `${np.artist ? np.artist + " - " : ""}${np.title}`;
+    } else {
+      title = `${act.source}${act.device ? " - " + act.device : ""}`;
+    }
   }
   const t = $("lcd-title");
   if (t.dataset.text !== title) {
@@ -454,6 +551,17 @@ function wireActions() {
       info(r.result === "unchanged" ? "That's already the name." : "Renaming... the new name shows up in about 30 seconds.");
     } catch (err) { oops(err); }
   });
+
+  $("radio-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    radioSearch({ q: $("radio-q").value, tag: $("radio-tag").value,
+      country: $("radio-country").value, order: $("radio-order").value });
+  });
+  $("radio-top").addEventListener("click", () => radioSearch({ order: "votes" }));
+  $("radio-popular").addEventListener("click", () => radioSearch({ order: "clickcount" }));
+  $("radio-favs").addEventListener("click", () => radioFavorites(true));
+  $("radio-stop").addEventListener("click", () => post("/api/radio", { cmd: "stop" }).catch(oops));
+  radioFavorites(false);
 
   for (const id of ["tone-bass", "tone-treble", "tone-cap"]) {
     const el_ = $(id);

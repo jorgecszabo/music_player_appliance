@@ -12,7 +12,7 @@ log() { echo "panda-setup: $*"; logger -t panda-setup "$*" 2>/dev/null || true; 
 
 PACKAGES="alsa-utils pipewire pipewire-alsa pipewire-tools wireplumber shairport-sync nftables
 	bluez pipewire-spa-bluez python3 py3-evdev py3-dbus-next
-	pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse"
+	pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse mpv"
 # (Alpine ships libpipewire-module-filter-chain in pipewire-pulse; the pulse
 # server itself is not started.)
 
@@ -75,6 +75,10 @@ if ! id speaker >/dev/null 2>&1; then
 	adduser -S -D -H -h /var/lib/speaker -s /sbin/nologin -G speaker -g "Audio services" speaker
 fi
 addgroup speaker audio 2>/dev/null || true
+# Radio favorites (written by panda-web) are saved with lbu.
+mkdir -p /var/lib/panda-web
+grep -qx "+var/lib/panda-web/radio-favorites.json" /etc/apk/protected_paths.d/lbu.list 2>/dev/null \
+	|| lbu include /var/lib/panda-web/radio-favorites.json
 # Web control panel: PipeWire via group speaker, privileged actions only
 # through doas + /etc/panda/web-admin.sh (/etc/doas.d/panda-web.conf).
 if ! id panda-web >/dev/null 2>&1; then
@@ -340,7 +344,7 @@ if [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ]; then
 fi
 sysctl -q -p /etc/sysctl.d/90-panda.conf || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport speaker-arbiter bluetooth panda-bt panda-chime-boot panda-web crond; do
+	speaker-shairport speaker-radio speaker-arbiter bluetooth panda-bt panda-chime-boot panda-web crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

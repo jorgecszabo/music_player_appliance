@@ -1,0 +1,40 @@
+#!/sbin/openrc-run
+# Internet radio player: mpv (audio only, idle until told to play), as user
+# speaker, playing into PipeWire. Controlled through mpv's JSON IPC socket
+# /run/speaker/radio.sock (group speaker: the web page, panda-arbiter).
+# Stations come from radio-browser.info, picked on the web page.
+
+description="Internet radio player (mpv, user speaker)"
+supervisor=supervise-daemon
+command=/usr/bin/mpv
+# Locked down: no config, scripts or youtube-dl; only what the web page loads.
+command_args="--idle=yes --no-video --no-terminal --config=no --load-scripts=no --ytdl=no
+	--ao=pipewire --audio-client-name=radio --input-ipc-server=/run/speaker/radio.sock
+	--cache=yes --cache-secs=20 --network-timeout=15 --msg-level=all=warn
+	--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=10"
+command_user="speaker:speaker"
+directory=/var/lib/speaker
+output_log=/var/log/speaker/radio.log
+error_log=/var/log/speaker/radio.log
+respawn_delay=3
+respawn_max=0
+supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker --env HOME=/var/lib/speaker"
+
+depend() {
+	need net speaker-wireplumber
+}
+
+start_pre() {
+	# A stale socket would be chmodded below and then replaced by mpv's own.
+	rm -f /run/speaker/radio.sock
+}
+
+start_post() {
+	# The IPC socket must be usable by group speaker (the web page); mpv
+	# creates it 0600.
+	local i=0
+	while [ ! -S /run/speaker/radio.sock ] && [ $i -lt 100 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	chmod 0660 /run/speaker/radio.sock 2>/dev/null || true
+}

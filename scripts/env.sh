@@ -5,6 +5,8 @@ CROSS_IMAGE="localhost/panda-alpine-cross:${ALPINE_VERSION}"
 
 # Board selection: BOARD=<name> picks boards/<name>/ (default pandaboard).
 BOARD="${BOARD:-pandaboard}"
+# It names the mkimage profile's shell functions and variables: letters, digits, _.
+[[ "$BOARD" =~ ^[a-z][a-z0-9_]*$ ]] || { echo "bad board name '$BOARD' (use [a-z][a-z0-9_]*)" >&2; exit 1; }
 BOARD_DIR="$PROJECT_DIR/boards/$BOARD"
 APPLIANCE_DIR="$PROJECT_DIR/appliance"
 [ -f "$BOARD_DIR/board.conf" ] || { echo "unknown board '$BOARD' (no $BOARD_DIR/board.conf)" >&2; exit 1; }

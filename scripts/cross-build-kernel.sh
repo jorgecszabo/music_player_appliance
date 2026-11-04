@@ -67,6 +67,21 @@ make -C "$SRC" -s O="$OUT" "$_defconfig"
 # The release suffix comes from localversion-alpine, not the fragment.
 "$SRC"/scripts/config --file "$OUT"/.config --set-str LOCALVERSION ""
 make -C "$SRC" -s O="$OUT" olddefconfig
+# Every fragment line must survive into the final config (a misspelt or
+# dependency-blocked option is silently dropped otherwise). LOCALVERSION is
+# cleared above on purpose.
+bad=0
+while IFS= read -r l; do
+    case "$l" in
+    CONFIG_LOCALVERSION=*) ;;
+    "# CONFIG_"*" is not set")
+        s=${l#\# }; s=${s%% *}
+        if grep -q "^$s=" "$OUT"/.config; then echo "fragment: $l, but $(grep "^$s=" "$OUT"/.config)" >&2; bad=1; fi ;;
+    CONFIG_*)
+        grep -qxF "$l" "$OUT"/.config || { echo "fragment: $l, but $(grep "^${l%%=*}=\|^# ${l%%=*} " "$OUT"/.config || echo "${l%%=*} doesn't exist or its dependencies are off")" >&2; bad=1; } ;;
+    esac
+done < "$APORT_DIR/$_fragment"
+[ "$bad" = 0 ] || { echo "fix $APORT_REL/$_fragment" >&2; exit 1; }
 make -C "$OUT" -j"$(nproc)" KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine" zImage modules dtbs
 
 rel=$(make -C "$OUT" -s kernelrelease)

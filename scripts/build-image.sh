@@ -5,8 +5,8 @@
 #       boards/<board>/board.conf, plus appliance/{appliance.conf,packages.list,
 #       genapkovl.sh,authorized_keys}.
 # Output: build/image/alpine-<board>-<tag>-<arch>.tar.gz, unpacked into
-#         build/sdimage/ ready for the board's SD card writer, e.g.
-#         sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage
+#         build/sdimage/<board>/ ready for the board's SD card writer, e.g.
+#         sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage/pandaboard
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 TAG="${TAG:-$ALPINE_VERSION-panda}"
@@ -71,7 +71,7 @@ ALPINE_ROOT=keepid "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     '
 "
 IMG="$PROJECT_DIR/build/image/alpine-$BOARD-$TAG-$ALPINE_ARCH.tar.gz"
-SD="$PROJECT_DIR/build/sdimage"
+SD="$PROJECT_DIR/build/sdimage/$BOARD"
 rm -rf "$SD"; mkdir -p "$SD"
 tar -C "$SD" -xzf "$IMG"
 
@@ -89,5 +89,5 @@ fi
 # - the chimes, synthesized here (slow on the board); .source = md5 of the generator
 CH="$APPLIANCE_DIR/rootfs/etc/panda/chimes.py"
 python3 -I "$CH" "$SD/chimes" && md5sum "$CH" | cut -d" " -f1 > "$SD/chimes/.source"
-ls -la "$PROJECT_DIR/build/sdimage" "$PROJECT_DIR/build/sdimage/boot"
-du -sh "$PROJECT_DIR/build/sdimage"
+ls -la "$SD" "$SD/boot"
+du -sh "$SD"

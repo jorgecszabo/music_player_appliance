@@ -5,6 +5,9 @@
 #   UBOOT_FILES      the files the card writer installs, e.g. "MLO u-boot.img"
 # Usage: [BOARD=<board>] scripts/build-u-boot.sh
 # Output: build/u-boot-out/<board>/ (UBOOT_FILES checked)
+# Patches: boards/<board>/u-boot/*.patch, applied in order (git apply). The
+# source tree is shared by all boards with the same UBOOT_TAG, so it is reset
+# to the tag first and only this board's patches are applied.
 # Uses the host's cross compiler (Fedora gcc-arm-linux-gnu); CROSS_COMPILE
 # overrides it.
 set -euo pipefail
@@ -18,6 +21,13 @@ OUT="$PROJECT_DIR/build/u-boot-out/$BOARD"
 
 [ -d "$SRC" ] || git clone --depth 1 --branch "$UBOOT_TAG" \
     https://source.denx.de/u-boot/u-boot.git "$SRC"
+# (Out-of-tree build: the tree holds no build outputs, only our patches.)
+git -C "$SRC" checkout -q -- .
+for p in "$BOARD_DIR"/u-boot/*.patch; do
+    [ -f "$p" ] || continue
+    echo ">>> applying ${p#"$PROJECT_DIR"/}"
+    git -C "$SRC" apply "$p"
+done
 
 make -C "$SRC" -s O="$OUT" "$UBOOT_DEFCONFIG"
 # Host crypto tools need OpenSSL ENGINE headers (not shipped by Fedora's

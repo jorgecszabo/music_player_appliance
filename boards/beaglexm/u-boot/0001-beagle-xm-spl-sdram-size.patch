@@ -1,0 +1,44 @@
+beagle: xM SPL: detect the xM by CPU family for the SDRAM setup
+
+The SPL sets up the SDRAM in board_init_f(), before driver model, so
+get_board_revision() can't request the revision GPIOs (it returns -1)
+and get_board_mem_timings() takes the "assume 128MB" default for both
+chip selects: a BeagleBoard-xM comes up with 256 MB of its 512 MB.
+U-Boot proper reads the GPIOs fine later (beaglerev, findfdt).
+
+Every xM is a DM3730 (OMAP36xx) and every older BeagleBoard an
+OMAP3530, so use the CPU family when the GPIOs don't give an xM
+revision.
+
+diff --git a/board/beagle/beagle/beagle.c b/board/beagle/beagle/beagle.c
+index 847d5966..6b725870 100644
+--- a/board/beagle/beagle/beagle.c
++++ b/board/beagle/beagle/beagle.c
+@@ -146,6 +146,18 @@ static int get_board_revision(void)
+ void get_board_mem_timings(struct board_sdrc_timings *timings)
+ {
+ 	int pop_mfr, pop_id;
++	int rev = get_board_revision();
++
++	/*
++	 * The SPL sets up the SDRAM in board_init_f(), before driver model,
++	 * so the revision GPIOs can't be read yet (rev = -1) and the xM got
++	 * the 128 MB-per-bank fallback: 256 MB of its 512 MB. Every xM is a
++	 * DM3730 (OMAP36xx) and every older Beagle an OMAP3530, so the CPU
++	 * family tells them apart. Both xM revisions take the same branch.
++	 */
++	if (get_cpu_family() == CPU_OMAP36XX &&
++	    rev != REVISION_XM_AB && rev != REVISION_XM_C)
++		rev = REVISION_XM_C;
+ 
+ 	/*
+ 	 * We need to identify what PoP memory is on the board so that
+@@ -155,7 +167,7 @@ void get_board_mem_timings(struct board_sdrc_timings *timings)
+ 	identify_nand_chip(&pop_mfr, &pop_id);
+ 
+ 	timings->mr = MICRON_V_MR_165;
+-	switch (get_board_revision()) {
++	switch (rev) {
+ 	case REVISION_C4:
+ 		if (pop_mfr == NAND_MFR_STMICRO && pop_id == 0xba) {
+ 			/* 512MB DDR */

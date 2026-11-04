@@ -36,7 +36,8 @@ Network: wired Ethernet, and Wi-Fi (onboard WL1271 or any common USB adapter; se
 
 ```
 SD card (MBR)
-└─ p1  FAT32, boot flag, ~512 MB, mounted read-only
+├─ raw: MLO @ sector 256, u-boot.img @ sector 768 (OMAP raw-mode boot)
+└─ p1  FAT32 from 4 MiB, boot flag, ~512 MB, mounted read-only
    ├─ MLO, u-boot.img            ← U-Boot v2024.07 (omap4_panda_defconfig)
    ├─ extlinux/extlinux.conf
    ├─ boot/vmlinuz-panda, initramfs-panda, modloop-panda
@@ -602,12 +603,13 @@ Later:
 ### Project layout
 
 ```
-boards/<board>/            everything board-specific (only pandaboard so far)
+boards/<board>/            everything board-specific (pandaboard; beaglexm, untested)
   board.conf               hardware description: arch, kernel flavor, DTB, console,
                            boot media, audio card/rate/mixer, BT, button, LEDs.
                            Also installed on the device as /etc/panda/board.conf
   mkimg.<board>.sh         mkimage profile (reads board.conf + appliance files)
-  write-sdcard.sh          SD card writer (pandaboard: raw-mode U-Boot + FAT32)
+  write-sdcard.sh          SD card writer (OMAP boards: wrapper for
+                           scripts/write-sdcard-omap.sh, raw-mode U-Boot + FAT32)
   u-boot/swap.sh           swap U-Boot on a written card
   aports/<pkg>/            board packages (linux-pandaboard: APKBUILD with the
                            defconfig/fragment/DTB list, cross-build.sh wrapper,
@@ -624,7 +626,7 @@ container/                 Containerfile (target-arch abuild/mkimage env),
                            Containerfile.cross (x86_64 + arm-none-eabi-gcc)
 scripts/                   env.sh (BOARD selection), alpine.sh, build-container.sh,
                            setup-keys.sh, build-u-boot.sh, build-package.sh,
-                           cross-build-kernel.sh, build-image.sh,
+                           cross-build-kernel.sh, build-image.sh, write-sdcard-omap.sh,
                            update-boot-files.sh, deploy.sh (push rootfs + run setup.sh),
                            build-soloist-runtime.sh (glibc runtime squashfs), serial-sysrq.py
 build/, packages/          outputs (gitignored)

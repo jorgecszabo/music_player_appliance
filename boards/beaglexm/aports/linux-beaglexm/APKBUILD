@@ -1,0 +1,50 @@
+# Maintainer: Jorge Szabo <jorgecszabo@gmail.com>
+#
+# Linux LTS kernel for the BeagleBoard-xM (DM3730) audio appliance.
+#
+# The kernel is cross-compiled natively on the x86_64 build host by
+# scripts/cross-build-kernel.sh into build/kernel-staging/<flavor>. This
+# APKBUILD only packages those files. scripts/build-package.sh runs
+# cross-build.sh first.
+# Config: _defconfig + _fragment; DTBs: _dtbs (relative to arch/arm/boot/dts/).
+# Both xM DTBs are shipped: U-Boot's findfdt picks omap3-beagle-xm-ab.dtb (rev
+# A/B, inverted hub power enable) or omap3-beagle-xm.dtb (rev C).
+# Layout follows main/linux-lts so update-kernel / mkimage / the modloop
+# service work unchanged: release "<ver>-<pkgrel>-beaglexm",
+# /boot/{vmlinuz,System.map,config}-beaglexm, /boot/dtbs-beaglexm/.
+_flavor=beaglexm
+pkgname=linux-$_flavor
+pkgver=6.18.60
+pkgrel=0
+pkgdesc="Linux LTS kernel for the BeagleBoard-xM (DM3730)"
+url="https://www.kernel.org"
+arch="armv7"
+license="GPL-2.0-only"
+depends="initramfs-generator"
+options="!strip !check !tracedeps"
+# The fragment is listed so its checksum is recorded with the package.
+source="beaglexm.config"
+# Read by scripts/cross-build-kernel.sh (single-line values).
+_defconfig=omap2plus_defconfig
+_fragment=beaglexm.config
+_dtbs="ti/omap/omap3-beagle-xm*.dtb"
+# The staged config must have this (catches a wrong or stale staging dir).
+_kconfig_check="CONFIG_ARCH_OMAP3=y"
+_staging="${PANDA_KERNEL_STAGING:-/work/build/kernel-staging/$_flavor}"
+
+package() {
+	local _rel="$pkgver-$pkgrel-$_flavor"
+	[ -f "$_staging"/usr/share/kernel/$_flavor/kernel.release ] \
+		|| die "no staged kernel in $_staging (run cross-build.sh)"
+	[ "$(cat "$_staging"/usr/share/kernel/$_flavor/kernel.release)" = "$_rel" ] \
+		|| die "staged kernel is not $_rel"
+	grep -qx "$_kconfig_check" "$_staging"/boot/config-$_flavor \
+		|| die "staged config lacks $_kconfig_check"
+
+	mkdir -p "$pkgdir"
+	cp -a "$_staging"/. "$pkgdir"/
+}
+
+sha512sums="
+2090ca68d34bfae6f61475b216530755bb897db5879eef0f33c9d0c53b628cc1e875f275301a8d051704c399506f163fa9ee2bcf11e8a67f25371c865a012835  beaglexm.config
+"

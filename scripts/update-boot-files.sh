@@ -2,10 +2,10 @@
 # Copy a staging directory onto the SD card's FAT boot partition (label
 # $BOOT_LABEL from board.conf) without reformatting or sudo (mounts via udisks).
 # Raw-mode U-Boot copies are not touched.
-# Usage: scripts/update-boot-files.sh [staging-dir]   (default build/sdimage)
+# Usage: scripts/update-boot-files.sh [staging-dir]   (default build/sdimage/<board>)
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
-STAGE="${1:-$PROJECT_DIR/build/sdimage}"
+STAGE="${1:-$PROJECT_DIR/build/sdimage/$BOARD}"
 PART=$(blkid -L "$BOOT_LABEL" 2>/dev/null || lsblk -lnpo PATH,LABEL | awk -v l="$BOOT_LABEL" '$2==l{print $1; exit}')
 [ -n "$PART" ] || { echo "no partition labelled $BOOT_LABEL found (is the card in the reader?)"; exit 1; }
 MNT=$(lsblk -no MOUNTPOINT "$PART")

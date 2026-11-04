@@ -21,6 +21,10 @@ error_log=/var/log/speaker/radio.log
 respawn_delay=3
 respawn_max=0
 supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker --env HOME=/var/lib/speaker"
+# Like the other audio clients: lets libpipewire's module-rt give mpv's stream
+# thread real-time priority. Without it, on a single core (BeagleBoard-xM) any
+# CPU burst delayed the thread past its deadline: underruns, audible pops.
+rc_ulimit="-r 95 -e 40"
 
 depend() {
 	need net speaker-wireplumber

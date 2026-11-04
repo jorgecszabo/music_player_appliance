@@ -31,6 +31,7 @@ import time
 
 import evdev
 from dbus_next import BusType, DBusError, Message, MessageType, Variant
+from dbus_next.errors import InterfaceNotFoundError
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method
 
@@ -209,9 +210,18 @@ class App:
             return
         if msg.member == "NameOwnerChanged" and msg.body[0] == BLUEZ and not msg.body[2]:
             if not self.bluez_gone.done():
-                self.bluez_gone.set_result(True)
+                self.bluez_gone.set_result("bluetoothd went away")
         elif msg.member == "PropertiesChanged" and msg.body[0] == "org.bluez.Device1":
             self.update_device(msg.path, msg.body[1])
+        elif msg.member == "InterfacesAdded" and msg.body[0] == self.adapter_path \
+                and "org.bluez.Adapter1" in msg.body[1]:
+            self.adapter_added.set()
+        elif msg.member == "InterfacesRemoved" and msg.body[0] == self.adapter_path \
+                and "org.bluez.Adapter1" in msg.body[1]:
+            # A USB dongle was unplugged: exit, and the supervisor restarts us
+            # into waiting for it again.
+            if not self.bluez_gone.done():
+                self.bluez_gone.set_result("adapter removed")
         elif msg.member == "InterfacesAdded" and "org.bluez.Device1" in msg.body[1]:
             self.update_device(msg.body[0], msg.body[1]["org.bluez.Device1"])
         elif msg.member == "InterfacesRemoved" and "org.bluez.Device1" in msg.body[1]:
@@ -415,20 +425,33 @@ class App:
     async def run(self):
         self.save_lock = asyncio.Lock()
         self.bluez_gone = asyncio.get_running_loop().create_future()
+        self.adapter_added = asyncio.Event()
         self.bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         self.bus.add_message_handler(self.on_message)
         await self.add_match("type='signal',sender='org.freedesktop.DBus',member='NameOwnerChanged',arg0='org.bluez'")
         await self.add_match("type='signal',sender='org.bluez'")
 
-        for _ in range(60):  # wait for bluetoothd and the controller
+        # Wait for bluetoothd and the controller, however long it takes: boards
+        # without onboard Bluetooth (BeagleBoard-xM) get one only when a USB
+        # dongle is plugged in. Exiting instead made the supervisor restart us
+        # every few seconds (a Python start is ~2 s of CPU on a Cortex-A8).
+        # BlueZ's InterfacesAdded wakes us; the timeout covers a missed signal.
+        waiting = False
+        while True:
             try:
                 self.adapter = await self.iface(self.adapter_path, "org.bluez.Adapter1")
                 break
-            except DBusError:
-                await asyncio.sleep(1)
-        else:
-            log("no adapter", self.adapter_path)
-            sys.exit(1)
+            except (DBusError, InterfaceNotFoundError):
+                if not waiting:
+                    log("waiting for the Bluetooth adapter", self.adapter_path)
+                    waiting = True
+                self.adapter_added.clear()
+                try:
+                    await asyncio.wait_for(self.adapter_added.wait(), 10)
+                except asyncio.TimeoutError:
+                    pass
+        if self.bluez_gone.done():   # bluetoothd restarted while we waited: fine now
+            self.bluez_gone = asyncio.get_running_loop().create_future()
 
         self.bus.export(AGENT_PATH, Agent(self))
         mgr = await self.iface("/org/bluez", "org.bluez.AgentManager1")
@@ -451,8 +474,8 @@ class App:
 
         self.control_srv = await self.control_server()
         tasks = [asyncio.ensure_future(self.button()), asyncio.ensure_future(self.reconnect())]
-        await self.bluez_gone
-        log("bluetoothd went away; exiting")
+        why = await self.bluez_gone
+        log(f"{why}; exiting")
         for t in tasks:
             t.cancel()
         self.led.set(False)

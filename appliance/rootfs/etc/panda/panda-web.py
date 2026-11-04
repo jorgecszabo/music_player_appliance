@@ -33,11 +33,14 @@ CORS preflight, which we never allow).
 """
 import json
 import os
+import pty
 import re
 import socket
 import subprocess
 import threading
 import time
+import traceback
+import tty
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -244,6 +247,91 @@ def save_favorites(favs):
 
 
 # --- status collection ----------------------------------------------------------------
+class PwObjects:
+    """PipeWire's objects, kept current by one long-running pw-dump --monitor.
+
+    Running pw-dump every 2 s cost ~6% CPU on a Cortex-A8, plus parsing its
+    160 KB of JSON here each time. The monitor prints every object once, then
+    only what changes: partial objects (just the changed info fields) and
+    {"id": N, "info": null} when an object is removed.
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.objects = {}
+
+    def start(self):
+        threading.Thread(target=self.loop, daemon=True).start()
+
+    def loop(self):
+        while True:
+            try:
+                self.monitor()
+            except OSError as e:
+                print(f"panda-web: pw-dump --monitor: {e}", flush=True)
+            with self.lock:
+                self.objects.clear()   # the next pw-dump starts with a full dump
+            time.sleep(2)
+
+    def monitor(self):
+        # Same parsing as panda-arbiter: a pseudo-terminal so pw-dump
+        # line-buffers, and each 2-space-indented object parsed when complete.
+        master, slave = pty.openpty()
+        tty.setraw(slave)
+        p = subprocess.Popen(["pw-dump", "--monitor", "--no-colors"], stdout=slave,
+                             stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=PW_ENV)
+        os.close(slave)
+        obj = None
+        try:
+            for line in os.fdopen(master, "r", errors="replace"):
+                if obj is None:
+                    if line.rstrip() == "  {":
+                        obj = [line]
+                    continue
+                obj.append(line)
+                if line.rstrip() in ("  }", "  },"):
+                    text = "".join(obj).rstrip().rstrip(",")
+                    obj = None
+                    try:
+                        self.update(json.loads(text))
+                    except ValueError:
+                        pass
+        finally:
+            p.kill()
+            p.wait()
+
+    def update(self, o):
+        oid = o.get("id")
+        if oid is None:
+            return
+        info = o.get("info", {})
+        with self.lock:
+            if info is None:
+                self.objects.pop(oid, None)
+                return
+            cur = self.objects.get(oid)
+            if cur is None:
+                self.objects[oid] = o
+                return
+            for k, v in o.items():
+                if k != "info":
+                    cur[k] = v
+            ci = cur.get("info") or {}
+            cur["info"] = ci
+            for k, v in (info or {}).items():
+                if k in ("props", "params") and isinstance(v, dict):
+                    ci[k] = {**(ci.get(k) or {}), **v}   # params: each key replaced whole
+                else:
+                    ci[k] = v
+
+    def nodes(self):
+        with self.lock:
+            return [o for o in self.objects.values() if o.get("type") == "PipeWire:Interface:Node"]
+
+
+PW = PwObjects()
+
+
 class Collector:
     """Builds the status snapshot every 2 s while someone is looking.
 
@@ -265,7 +353,7 @@ class Collector:
         self.wake_fast = threading.Event()
         self.wake_slow = threading.Event()
         # (name, period in s), cheapest first.
-        self.probes = [("services", 5, self.services), ("net", 10, self.net),
+        self.probes = [("services", 15, self.services), ("net", 10, self.net),
                        ("pwtop", 10, self.pwtop), ("lbu", 15, self.lbu), ("sync", 30, self.sync),
                        ("spotify", 30, self.spotify)]
 
@@ -466,15 +554,9 @@ class Collector:
         return res
 
     def audio(self):
-        try:
-            dump = json.loads(run(["pw-dump"], env=PW_ENV) or "[]")
-        except ValueError:
-            dump = []
         top = self.slow.get("pwtop") or {}
         sink, output, streams = None, None, []
-        for o in dump:
-            if o.get("type") != "PipeWire:Interface:Node":
-                continue
+        for o in PW.nodes():
             info = o.get("info") or {}
             props = info.get("props") or {}
             params = info.get("params") or {}
@@ -736,6 +818,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(handler(req))
         except ValueError as e:
             self.send_json({"error": str(e)}, 400)
+        except OSError as e:
+            # Network trouble, e.g. radio-browser.info resetting the
+            # connection (it does that now and then): say so instead of
+            # dropping the request.
+            reason = getattr(e, "reason", None) or e.strerror or e.__class__.__name__
+            self.send_json({"error": f"network error: {reason}"}, 502)
+        except Exception as e:
+            traceback.print_exc()
+            self.send_json({"error": f"internal error: {e.__class__.__name__}"}, 500)
 
     # --- actions ---------------------------------------------------------------
     def volume(self, req):
@@ -791,6 +882,7 @@ class Handler(BaseHTTPRequestHandler):
             run(ADMIN + ["restart", name])
         else:
             raise ValueError("not restartable")
+        COLLECTOR.refresh("services")   # its period is 15 s
         return {"ok": True}
 
     def system(self, req):
@@ -884,6 +976,7 @@ class Server(ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    PW.start()
     COLLECTOR.start()
     print(f"panda-web: listening on port {PORT}", flush=True)
     Server(("::", PORT), Handler).serve_forever()

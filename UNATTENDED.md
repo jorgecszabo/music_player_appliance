@@ -248,3 +248,13 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   (no display on the board), applied live with `kill -HUP 1`.
 - `rc_parallel="YES"`: default runlevel done 40 s after kernel start instead of 48 s; all 22
   services start (2 reboots tested). Services are already minimal (each one is used).
+
+### Task 7b: radio improvements (done)
+
+- Genre field suggests radio-browser tags as you type (`/json/tags/<text>`, most stations
+  first, e.g. "jaz" -> jazz 1270, smooth jazz 262, ...); country field suggests all 227
+  countries with stations (`/json/countries`: code, name, count). Native `<datalist>`.
+- Paging: 41 rows requested per page, so Prev/Next appear only when there's more.
+- API use per its docs: mirrors discovered by resolving all.api.radio-browser.info and
+  reverse-resolving the addresses (currently de1), next mirror on errors, descriptive
+  User-Agent, `hidebroken`, clicks via `/json/url`, tag/country lists cached for a day.

@@ -380,7 +380,8 @@ table.props td { padding: 4px 0; overflow-wrap: anywhere; }
 .radio-form { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 10px; font-size: 12px; }
 .radio-form label { display: inline-flex; align-items: center; gap: 4px; }
 .field.short { width: 90px; }
-.field.tiny { width: 40px; text-transform: uppercase; }
+.field.tiny { width: 48px; text-transform: uppercase; }
+.pager { justify-content: center; }
 .fav { background: none; border: 0; cursor: pointer; font-size: 15px; color: var(--shadow); padding: 0 2px; }
 .fav.on { color: #e0a000; text-shadow: 1px 1px 0 #000; }
 tr.playing td { background: #000080; color: #fff; }

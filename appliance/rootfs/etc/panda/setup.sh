@@ -32,7 +32,9 @@ done
 if [ -n "$missing" ]; then
 	log "installing:$missing"
 	mount -o remount,rw /media/"$BOOT_MEDIA"
-	if apk update -q && apk add $missing && apk cache sync; then rc=0; else rc=$?; fi
+	# Offline (first boot without network) the card's own repository is enough.
+	apk update -q || log "apk update failed (offline?); using the card's repository"
+	if apk add $missing && apk cache sync; then rc=0; else rc=$?; fi
 	sync
 	mount -o remount,ro /media/"$BOOT_MEDIA"
 	[ "$rc" -eq 0 ] || { log "ERROR: apk add failed"; exit 1; }

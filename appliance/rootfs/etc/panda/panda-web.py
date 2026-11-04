@@ -16,7 +16,9 @@ firewall redirects port 80 to it. LAN only (firewall).
   POST /api/name             {"name": <speaker name>}
   POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
   POST /api/audio            {"bass": dB, "treble": dB, "cap": step}  (saved after 15 s)
-  GET  /api/radio/search     ?q=&tag=&country=&order=votes|clickcount|name  (radio-browser.info)
+  GET  /api/radio/search     ?q=&tag=&country=&order=votes|clickcount|name&page=N  (radio-browser.info)
+  GET  /api/radio/tags       ?q=<text>   genre suggestions (most stations first)
+  GET  /api/radio/countries  all countries with stations (code, name, count)
   GET  /api/radio/favorites
   POST /api/radio            {"cmd": "play", "uuid"} | {"cmd": "stop"} | {"cmd": "fav", "uuid", "add": bool}
 
@@ -100,7 +102,7 @@ def bt_call(req, timeout=5):
 
 
 # --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
-RADIO_API = "https://all.api.radio-browser.info"
+RADIO_DNS = "all.api.radio-browser.info"
 RADIO_UA = "PandaSpeaker/1.0 (PandaBoard Alpine speaker; panda-web)"
 MPV_SOCK = "/run/speaker/radio.sock"
 FAVORITES = "/var/lib/panda-web/radio-favorites.json"
@@ -110,19 +112,55 @@ RADIO = {"station": None}
 _radio_cache = {}
 
 
-def rb_get(path, params=None, timeout=10):
+_rb_servers = {"names": [], "at": 0.0}
+
+
+def rb_servers():
+    """radio-browser's mirrors, as its docs ask: resolve all.api.radio-browser.info,
+    reverse-resolve each address to its server name (HTTPS needs the name)."""
+    import random
+    if _rb_servers["names"] and time.monotonic() - _rb_servers["at"] < 3600:
+        return _rb_servers["names"]
+    names = set()
+    try:
+        for a in {ai[4][0] for ai in socket.getaddrinfo(RADIO_DNS, 443, proto=socket.IPPROTO_TCP)}:
+            try:
+                names.add(socket.gethostbyaddr(a)[0])
+            except OSError:
+                pass
+    except OSError:
+        pass
+    names = [n for n in names if n.endswith(".api.radio-browser.info")] or [RADIO_DNS]
+    random.shuffle(names)
+    _rb_servers.update(names=names, at=time.monotonic())
+    return names
+
+
+def rb_get(path, params=None, timeout=10, ttl=300):
+    """GET a radio-browser API path (JSON), trying the mirrors in turn; cached."""
     import urllib.parse
     import urllib.request
-    url = RADIO_API + path + ("?" + urllib.parse.urlencode(params) if params else "")
-    hit = _radio_cache.get(url)
-    if hit and time.monotonic() - hit[0] < 300 and not path.startswith("/json/url/"):
+    query = "?" + urllib.parse.urlencode(params) if params else ""
+    key = path + query
+    hit = _radio_cache.get(key)
+    if hit and time.monotonic() - hit[0] < ttl and not path.startswith("/json/url/"):
         return hit[1]
-    req = urllib.request.Request(url, headers={"User-Agent": RADIO_UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.loads(r.read(4 * 1024 * 1024))
-    _radio_cache[url] = (time.monotonic(), data)
-    if len(_radio_cache) > 200:
+    err = None
+    for i, server in enumerate(rb_servers()[:3]):
+        req = urllib.request.Request(f"https://{server}{key}", headers={"User-Agent": RADIO_UA})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.loads(r.read(8 * 1024 * 1024))
+            break
+        except (OSError, ValueError) as e:
+            err = e
+            if i == 0:
+                _rb_servers["at"] = 0.0   # rediscover next time
+    else:
+        raise err or OSError("no radio-browser server")
+    if len(_radio_cache) > 300:
         _radio_cache.clear()
+    _radio_cache[key] = (time.monotonic(), data)
     return data
 
 
@@ -581,7 +619,10 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(url.query)
             arg = lambda k: (q.get(k, [""])[0] or "").strip()[:60]
             order = arg("order") if arg("order") in ("votes", "clickcount", "name") else "votes"
-            params = {"limit": 40, "hidebroken": "true", "order": order,
+            page = int(arg("page")) if arg("page").isdigit() else 0
+            page = min(page, 250)
+            # One extra row tells whether there's a next page.
+            params = {"limit": 41, "offset": page * 40, "hidebroken": "true", "order": order,
                       "reverse": "false" if order == "name" else "true"}
             if arg("q"):
                 params["name"] = arg("q")
@@ -590,8 +631,35 @@ class Handler(BaseHTTPRequestHandler):
             if re.fullmatch(r"[A-Za-z]{2}", arg("country")):
                 params["countrycode"] = arg("country").upper()
             try:
-                res = rb_get("/json/stations/search", params)
-                self.send_json({"stations": [station_summary(s) for s in res if isinstance(s, dict)]})
+                res = [s for s in rb_get("/json/stations/search", params) if isinstance(s, dict)]
+                self.send_json({"stations": [station_summary(s) for s in res[:40]],
+                                "page": page, "more": len(res) > 40})
+            except Exception as e:
+                self.send_json({"error": f"radio-browser.info: {e.__class__.__name__}"}, 502)
+        elif url.path == "/api/radio/tags":
+            q = (parse_qs(url.query).get("q", [""])[0] or "").strip().lower()[:40]
+            try:
+                if len(q) < 2:
+                    tags = rb_get("/json/tags", {"order": "stationcount", "reverse": "true",
+                                                 "hidebroken": "true", "limit": 40}, ttl=86400)
+                else:
+                    import urllib.parse
+                    tags = rb_get("/json/tags/" + urllib.parse.quote(q, safe=""),
+                                  {"order": "stationcount", "reverse": "true",
+                                   "hidebroken": "true", "limit": 25}, ttl=86400)
+                self.send_json({"tags": [{"name": str(t.get("name", ""))[:60],
+                                          "count": t.get("stationcount", 0)}
+                                         for t in tags if isinstance(t, dict) and t.get("name")]})
+            except Exception as e:
+                self.send_json({"error": f"radio-browser.info: {e.__class__.__name__}"}, 502)
+        elif url.path == "/api/radio/countries":
+            try:
+                cs = rb_get("/json/countries", {"order": "name", "hidebroken": "true"}, ttl=86400)
+                self.send_json({"countries": [{"code": str(c.get("iso_3166_1", ""))[:2].upper(),
+                                               "name": str(c.get("name", ""))[:60],
+                                               "count": c.get("stationcount", 0)}
+                                              for c in cs if isinstance(c, dict)
+                                              and re.fullmatch(r"[A-Za-z]{2}", str(c.get("iso_3166_1", "")))]})
             except Exception as e:
                 self.send_json({"error": f"radio-browser.info: {e.__class__.__name__}"}, 502)
         elif url.path == "/api/radio/favorites":

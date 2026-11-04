@@ -83,8 +83,12 @@
     </div>
     <form id="radio-form" class="radio-form">
       <label>Name <input type="text" class="field" id="radio-q" maxlength="60" placeholder="e.g. jazz fm"></label>
-      <label>Genre <input type="text" class="field short" id="radio-tag" maxlength="40" placeholder="rock"></label>
-      <label>Country <input type="text" class="field tiny" id="radio-country" maxlength="2" placeholder="AR"></label>
+      <label>Genre <input type="text" class="field short" id="radio-tag" maxlength="40" placeholder="rock"
+        list="radio-tag-list" autocomplete="off"></label>
+      <label>Country <input type="text" class="field tiny" id="radio-country" maxlength="2" placeholder="AR"
+        list="radio-country-list" autocomplete="off"></label>
+      <datalist id="radio-tag-list"></datalist>
+      <datalist id="radio-country-list"></datalist>
       <label>Sort <select id="radio-order"><option value="votes">Votes</option><option value="clickcount">Popular</option><option value="name">Name</option></select></label>
       <button class="btn" type="submit">Search</button>
     </form>
@@ -98,6 +102,11 @@
       <thead><tr><th title="Favorite">&#9733;</th><th>Station</th><th class="hide-narrow">Country</th><th>Format</th><th class="hide-narrow">Tags</th><th></th></tr></thead>
       <tbody><tr><td colspan="6" class="center">Search for a station, or press Top voted.</td></tr></tbody>
     </table>
+    <div class="button-row pager" id="radio-pager" hidden>
+      <button class="btn" type="button" id="radio-prev">&lt; Prev</button>
+      <span class="small" id="radio-page">Page 1</span>
+      <button class="btn" type="button" id="radio-next">Next &gt;</button>
+    </div>
   </div>
 </section>
 

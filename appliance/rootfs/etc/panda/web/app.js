@@ -167,15 +167,44 @@ function drawStations(list, emptyText) {
   if (last) renderRadio(last);
 }
 
-async function radioSearch(params) {
+let radioQuery = null;    // last search (for paging)
+
+async function radioSearch(params, page = 0) {
+  radioQuery = params;
   setText("radio-status", "Searching...");
   try {
-    const r = await fetch(`/api/radio/search?${new URLSearchParams(params)}`);
+    const r = await fetch(`/api/radio/search?${new URLSearchParams({ ...params, page })}`);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     drawStations(d.stations, "No stations found. Try another search!");
-    setText("radio-status", `${d.stations.length} station(s)`);
+    const first = d.page * 40 + 1;
+    setText("radio-status", d.stations.length ? `Stations ${first}-${first + d.stations.length - 1}${d.more ? "+" : ""}` : "");
+    $("radio-pager").hidden = !(d.page > 0 || d.more);
+    $("radio-prev").disabled = d.page === 0;
+    $("radio-next").disabled = !d.more;
+    setText("radio-page", `Page ${d.page + 1}`);
+    $("radio-pager").dataset.page = d.page;
   } catch (e) { setText("radio-status", ""); oops(e); }
+}
+
+// Suggestions: genres from radio-browser's tag list as you type, countries once.
+let tagTimer = null;
+async function suggestTags() {
+  const q = $("radio-tag").value.trim();
+  try {
+    const d = await (await fetch(`/api/radio/tags?${new URLSearchParams({ q })}`)).json();
+    const list = $("radio-tag-list");
+    list.replaceChildren(...(d.tags || []).map((t) =>
+      el("option", { value: t.name, label: `${t.count} stations` })));
+  } catch { /* suggestions are optional */ }
+}
+
+async function loadCountries() {
+  try {
+    const d = await (await fetch("/api/radio/countries")).json();
+    $("radio-country-list").replaceChildren(...(d.countries || []).map((c) =>
+      el("option", { value: c.code, label: `${c.name} (${c.count})` })));
+  } catch { /* optional */ }
 }
 
 async function radioFavorites(show) {
@@ -561,7 +590,12 @@ function wireActions() {
   });
   $("radio-top").addEventListener("click", () => radioSearch({ order: "votes" }));
   $("radio-popular").addEventListener("click", () => radioSearch({ order: "clickcount" }));
-  $("radio-favs").addEventListener("click", () => radioFavorites(true));
+  $("radio-favs").addEventListener("click", () => { $("radio-pager").hidden = true; radioFavorites(true); });
+  $("radio-prev").addEventListener("click", () => radioQuery && radioSearch(radioQuery, Math.max(0, +$("radio-pager").dataset.page - 1)));
+  $("radio-next").addEventListener("click", () => radioQuery && radioSearch(radioQuery, +$("radio-pager").dataset.page + 1));
+  $("radio-tag").addEventListener("input", () => { clearTimeout(tagTimer); tagTimer = setTimeout(suggestTags, 200); });
+  $("radio-tag").addEventListener("focus", () => { if (!$("radio-tag-list").children.length) suggestTags(); }, { once: true });
+  $("radio-country").addEventListener("focus", () => { if (!$("radio-country-list").children.length) loadCountries(); }, { once: true });
   $("radio-stop").addEventListener("click", () => post("/api/radio", { cmd: "stop" }).catch(oops));
   radioFavorites(false);
 

@@ -44,6 +44,7 @@ ALPINE_ROOT=keepid "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
         set -eu
         rm -rf ~/.mkimage && mkdir -p ~/.mkimage
         cd /work && cp $(echo $MKIMAGE_FILES) ~/.mkimage/
+        tar -C /work/appliance/rootfs --owner=0 --group=0 -cf ~/.mkimage/rootfs.tar etc
         . ~/.abuild/abuild.conf; export PACKAGER_PRIVKEY
         cd /work/build/src/aports/scripts
         sh mkimage.sh --tag $TAG --arch $ALPINE_ARCH --profile $BOARD --hostkeys \
@@ -54,7 +55,23 @@ ALPINE_ROOT=keepid "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     '
 "
 IMG="$PROJECT_DIR/build/image/alpine-$BOARD-$TAG-$ALPINE_ARCH.tar.gz"
-rm -rf "$PROJECT_DIR/build/sdimage"; mkdir -p "$PROJECT_DIR/build/sdimage"
-tar -C "$PROJECT_DIR/build/sdimage" -xzf "$IMG"
+SD="$PROJECT_DIR/build/sdimage"
+rm -rf "$SD"; mkdir -p "$SD"
+tar -C "$SD" -xzf "$IMG"
+
+# Extras on the boot media, next to what mkimage made:
+HOST=$(. "$APPLIANCE_DIR/appliance.conf"; echo "$HOSTNAME")
+# - factory overlay: a factory reset restores it (lbu overwrites the original)
+mkdir -p "$SD/factory"; cp "$SD/$HOST.apkovl.tar.gz" "$SD/factory/$HOST.apkovl.tar.gz"
+# - the Soloist glibc runtime (no Soloist binary: the device downloads it)
+RT="$PROJECT_DIR/build/soloist/soloist-runtime-$ALPINE_ARCH.squashfs"
+if [ -f "$RT" ]; then
+    mkdir -p "$SD/soloist"; cp "$RT" "$SD/soloist/soloist-runtime.squashfs"
+else
+    echo "WARNING: no $RT (scripts/build-soloist-runtime.sh): Spotify won't work" >&2
+fi
+# - the chimes, synthesized here (slow on the board); .source = md5 of the generator
+CH="$APPLIANCE_DIR/rootfs/etc/panda/chimes.py"
+python3 -I "$CH" "$SD/chimes" && md5sum "$CH" | cut -d" " -f1 > "$SD/chimes/.source"
 ls -la "$PROJECT_DIR/build/sdimage" "$PROJECT_DIR/build/sdimage/boot"
 du -sh "$PROJECT_DIR/build/sdimage"

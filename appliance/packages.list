@@ -1,9 +1,23 @@
 # Packages for the local repository on the boot card (installed offline at
 # boot if they're in /etc/apk/world). One or more per line; # starts a comment.
+# Keep in sync with PACKAGES in appliance/rootfs/etc/panda/setup.sh: first boot
+# installs those from this repository, without network.
 alpine-base apk-cron busybox doas openssl tzdata wget
 chrony
 openssh
 avahi dbus
 e2fsprogs dosfstools
-alsa-utils
+# setup-devd udev (PipeWire needs udevd)
+eudev udev-init-scripts udev-init-scripts-openrc
+# Audio
+alsa-utils pipewire pipewire-alsa pipewire-tools wireplumber
+pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse
+pipewire-spa-bluez
+# AirPlay (our aports build with the native PipeWire backend wins by version)
+shairport-sync shairport-sync-openrc
+# Bluetooth
 bluez bluez-deprecated
+# Appliance services (python3: panda-bt, panda-web, panda-arbiter)
+python3 py3-evdev py3-dbus-next
+nftables
+mpv

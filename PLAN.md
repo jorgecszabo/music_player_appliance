@@ -156,9 +156,16 @@ arbitration, Bluetooth integration and the network sink.
 - **Stack:** `bluez` + WirePlumber's bluez5 monitor (A2DP sink role; optionally
   AAC via fdk-aac if packaged). Disable the onboard controller if the dongle is
   used.
-- **Headless pairing:** use a small agent (bluez `simple-agent`-style
-  NoInputNoOutput, or a pairing-mode timeout after boot or after a button press).
-  The Panda's user button (GPIO 121) could open a pairing window.
+- **Headless pairing with button S2 (GPIO 121):** the DT already makes it a
+  `gpio-keys` input (`BTN_0`); LEDs `pandaboard::status1/2` give feedback.
+  A small Python service (`py3-evdev` + `py3-dbus`, OpenRC):
+  - short press: 2-minute pairing window (discoverable + pairable,
+    NoInputNoOutput "Just Works" agent); status2 blinks fast
+  - pairing succeeds: `lbu commit` (pairing keys), "done" blink, window closes
+  - long press (~5 s): forget all paired devices, distinct blink, commit
+  - otherwise: not discoverable, not pairable; known devices can still
+    reconnect
+  Trade-off: anyone nearby can pair during the window (normal for BT speakers).
 - **Persistence:** `/var/lib/bluetooth` (pairing keys) must be in lbu, and is
   committed after each new pairing.
 

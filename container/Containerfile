@@ -1,7 +1,8 @@
-# Native armv7 Alpine build environment (runs under qemu-user binfmt on x86_64).
+# Target-arch Alpine build environment (runs under qemu-user binfmt on x86_64).
+# The arch comes from `podman build --platform` (scripts/build-container.sh).
 # Used for abuild packaging (kernel, U-Boot, userland ports) and mkimage.
 ARG ALPINE_VERSION=3.24
-FROM --platform=linux/arm/v7 docker.io/library/alpine:${ALPINE_VERSION}
+FROM docker.io/library/alpine:${ALPINE_VERSION}
 
 RUN apk add --no-cache \
         alpine-sdk alpine-conf abuild-rootbld \

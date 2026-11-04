@@ -1,6 +1,6 @@
 #!/bin/bash
 # Replace MLO + u-boot.img on an already-written PandaBoard SD card's FAT partition.
-# Usage: sudo scripts/swap-uboot.sh /dev/sdX1 <dir-with-MLO-and-u-boot.img>
+# Usage: sudo boards/pandaboard/u-boot/swap.sh /dev/sdX1 <dir-with-MLO-and-u-boot.img>
 set -euo pipefail
 PART="${1:?usage: $0 /dev/sdX1 dir}"; SRC="${2:?usage: $0 /dev/sdX1 dir}"
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)"; exit 1; }

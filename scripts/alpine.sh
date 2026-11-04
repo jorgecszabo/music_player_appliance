@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run a command (or a shell) inside the armv7 Alpine build container.
+# Run a command (or a shell) inside the target-arch Alpine build container.
 # The project is mounted at /work and keys/ at ~/.abuild, with the shared SELinux
 # label (:z): a private label (:Z) relabels the tree for each new container
 # and locks out any container that is already running.
@@ -13,7 +13,7 @@ tty_flag=(); [ -t 0 ] && tty_flag=(-it)
 user_flags=(--userns=keep-id)
 [ "${ALPINE_ROOT:-0}" = 1 ] && user_flags=(--user 0)
 [ "${ALPINE_ROOT:-0}" = keepid ] && user_flags=(--userns=keep-id --user 0)
-exec podman run --rm "${tty_flag[@]}" --platform linux/arm/v7 \
+exec podman run --rm "${tty_flag[@]}" --platform "$CONTAINER_PLATFORM" \
     "${user_flags[@]}" \
     -v "$PROJECT_DIR:/work:z" \
     -v "$PROJECT_DIR/keys:/home/builder/.abuild:z" \

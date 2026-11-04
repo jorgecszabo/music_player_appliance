@@ -1,0 +1,9 @@
+# Packages for the local repository on the boot card (installed offline at
+# boot if they're in /etc/apk/world). One or more per line; # starts a comment.
+alpine-base apk-cron busybox doas openssl tzdata wget
+chrony
+openssh
+avahi dbus
+e2fsprogs dosfstools
+alsa-utils
+bluez bluez-deprecated

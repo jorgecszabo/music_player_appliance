@@ -10,16 +10,21 @@
 # about 2 hours compiling under qemu-user.
 set -euo pipefail
 APORT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$APORT_DIR/../../.." && pwd)"
-source "$PROJECT_DIR/scripts/env.sh"
+PROJECT_DIR="$APORT_DIR"
+while [ ! -f "$PROJECT_DIR/scripts/env.sh" ]; do
+    [ "$PROJECT_DIR" != / ] || { echo "can't find the project root" >&2; exit 1; }
+    PROJECT_DIR="$(dirname "$PROJECT_DIR")"
+done
+APORT_REL="${APORT_DIR#"$PROJECT_DIR"/}"
 
 if [ -z "${PANDA_IN_CROSS:-}" ]; then
+    source "$PROJECT_DIR/scripts/env.sh"
     podman image exists "$CROSS_IMAGE" || podman build --platform linux/amd64 \
         --build-arg ALPINE_VERSION="$ALPINE_VERSION" -t "$CROSS_IMAGE" \
         -f "$PROJECT_DIR/container/Containerfile.cross" "$PROJECT_DIR/container"
     exec podman run --rm --platform linux/amd64 -e PANDA_IN_CROSS=1 \
         -v "$PROJECT_DIR:/work:z" "$CROSS_IMAGE" \
-        bash /work/aports/main/linux-pandaboard/cross-build.sh
+        bash "/work/$APORT_REL/cross-build.sh"
 fi
 
 # --- inside the cross container (/work = project) -----------------------------

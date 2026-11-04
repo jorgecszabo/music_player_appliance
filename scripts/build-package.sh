@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build one of our aports with abuild in the armv7 container.
-# Usage: scripts/build-package.sh <name>     (e.g. linux-pandaboard)
-# Output: packages/main/armv7/*.apk + signed APKINDEX
+# Build one of our aports with abuild in the board's target-arch container.
+# Usage: [BOARD=<board>] scripts/build-package.sh <name>   (e.g. linux-pandaboard)
+# Output: packages/main/<arch>/*.apk + signed APKINDEX
 #
 # - If the aport has a cross-build.sh, it runs first on the x86_64 host (in the
 #   cross container) and stages prebuilt files for the APKBUILD to package.
@@ -12,8 +12,12 @@
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 PKG="${1:?usage: $0 <aport name>}"
-APORT="$PROJECT_DIR/aports/main/$PKG"
-[ -f "$APORT/APKBUILD" ] || { echo "no aports/main/$PKG/APKBUILD"; exit 1; }
+# Board-specific aports (boards/<board>/aports/) win over generic ones (aports/).
+APORT=""
+for d in "$BOARD_DIR/aports/$PKG" "$PROJECT_DIR/aports/$PKG"; do
+    if [ -f "$d/APKBUILD" ]; then APORT="$d"; break; fi
+done
+[ -n "$APORT" ] || { echo "no APKBUILD for $PKG in boards/$BOARD/aports/ or aports/"; exit 1; }
 
 if [ -x "$APORT/cross-build.sh" ]; then
     echo ">>> $PKG: cross-build.sh"
@@ -35,4 +39,4 @@ ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
 "
 # Keep checksums that abuild filled in.
 cmp -s "$WORK/APKBUILD" "$APORT/APKBUILD" || cp "$WORK/APKBUILD" "$APORT/APKBUILD"
-ls -l "$PROJECT_DIR/packages/main/armv7/"
+ls -l "$PROJECT_DIR/packages/main/$ALPINE_ARCH/"

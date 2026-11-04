@@ -1,6 +1,6 @@
 build/
 keys/*.rsa
 packages/
-image/authorized_keys
-aports/*/*/src/
-aports/*/*/pkg/
+appliance/authorized_keys
+**/aports/*/src/
+**/aports/*/pkg/

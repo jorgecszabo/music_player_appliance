@@ -303,14 +303,14 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   (the private key is gitignored, so back it up); host cross gcc 16.2 checked.
   Still to do: re-login for `dialout`, and connect the serial adapter.
 - [x] **Phase 1** (2026-11-03): U-Boot v2024.07 builds with the host cross gcc
-  (`scripts/build-uboot.sh`; `TOOLS_LIBCRYPTO` disabled because Fedora lacks the
+  (`boards/pandaboard/u-boot/build.sh`; `TOOLS_LIBCRYPTO` disabled because Fedora lacks the
   OpenSSL ENGINE headers). Default env: `findfdt` sets `omap4-panda.dtb`,
   console `ttyO2,115200n8`, distro boot (extlinux) on mmc0 first.
-  SD card writer: `sudo scripts/write-sdcard.sh /dev/sdX`.
+  SD card writer: `sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage`.
   Hardware findings (board is **OMAP4430-GP ES2.1**):
   - The ROM does **not** boot `MLO` from our FAT partition (probably the old
     CHS-geometry quirk). **Raw mode works**: `MLO` at sector 256, `u-boot.img`
-    at sector 768, which `write-sdcard.sh` now writes. U-Boot itself reads the
+    at sector 768, which `boards/pandaboard/write-sdcard.sh` now writes. U-Boot itself reads the
     FAT partition fine, so kernel/extlinux/Alpine stay on p1.
   - Debian 12's U-Boot 2023.01 reaches the prompt. In U-Boot, `usb start` finds
     no LAN9514 hub/ethernet (bit-rot). Linux powers the hub itself from the DT,
@@ -319,11 +319,9 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - `ti_sysc target-module@d5000` (MMC5, Wi-Fi SDIO) errors are harmless.
   - Our own 2024.07 build boots to the prompt in raw mode, so we use it.
 - [x] **Phase 2** (2026-11-03): Linux 6.18.60 LTS cross-builds
-  (`scripts/config-kernel.sh` = omap2plus_defconfig + `aports/main/linux-pandaboard/pandaboard.config`,
-  then `scripts/build-kernel.sh`). Notes: gzip kernel compression (Fedora has no `lzma` tool);
+  (omap2plus_defconfig + `boards/pandaboard/aports/linux-pandaboard/pandaboard.config`). Notes: gzip kernel compression (Fedora has no `lzma` tool);
   USB gadget/MUSB disabled so NOP_USB_XCEIV/EHCI/SMSC95xx can be built in; zstd firmware
-  loading enabled (Alpine compresses linux-firmware). Test image: `scripts/make-test-initramfs.sh`
-  makes `build/testboot/` (Alpine userland + modules + `test/init`, shell on serial).
+  loading enabled (Alpine compresses linux-firmware). The Phase 2 test initramfs tooling was removed in the restructure (it's in git history).
   **Verified on hardware (2026-11-03):**
   - Ethernet: Linux powers the LAN9514 hub; `eth0` gets DHCP. MAC
     `02:03:00:a0:15:e0` is the same on every boot, so no pinning needed.
@@ -344,7 +342,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     firmware) and the omap4-keypad probe error. TWL6030 "vsel out of range"
     warnings are for the 1.2 GHz OPP the 4430 doesn't use, so they're harmless.
 - [x] **Phase 3** (2026-11-03): Alpine diskless image.
-  - `aports/main/linux-pandaboard` (release `6.18.60-0-pandaboard`): the kernel is
+  - `boards/pandaboard/aports/linux-pandaboard` (release `6.18.60-0-pandaboard`): the kernel is
     **cross-compiled** by `cross-build.sh` in an x86_64 Alpine container
     (`container/Containerfile.cross`, Alpine `arm-none-eabi-gcc` 16.1, about 10 min) into
     `build/kernel-staging/`. The APKBUILD only packages those files in the armv7 container.
@@ -352,11 +350,11 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     Building natively under qemu-user took about 2 hours, so we dropped it. abuild runs on a copy
     in `build/abuild/` as container root (`abuild -F`), because setuid/sudo don't work under
     qemu-user.
-  - `image/mkimg.pandaboard.sh` profile + `image/genapkovl-pandaboard.sh` (hostname
+  - `boards/pandaboard/mkimg.pandaboard.sh` profile + `appliance/genapkovl.sh` (hostname
     `panda`, eth0 DHCP, chronyd, `LBU_MEDIA=mmcblk0p1`; **SSH only as user `panda`**, key-only,
     `PermitRootLogin no`; `doas` `permit nopass panda`; root keeps a password for the serial
     console). The `panda` user is created by `/etc/local.d/panda-firstboot.start` (keys from
-    the build host's `~/.ssh/*.pub` via `image/authorized_keys`, gitignored; password field
+    the build host's `~/.ssh/*.pub` via `appliance/authorized_keys`, gitignored; password field
     `*`, because busybox's `!` would make OpenSSH refuse keys; `/home/panda/.ssh` added to lbu;
     commits once). When running `setup-alpine`, skip its user-creation step. Built by
     `scripts/build-image.sh` into `build/sdimage/`. Serial getty comes from
@@ -378,28 +376,35 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - **Power-yank test passed:** overlay reloads, SSH host key is unchanged, root
     password and `panda` are kept, first-boot doesn't rerun, no FAT dirty/fsck
     warnings, `lbu status` is clean.
-- [ ] Next: repo restructure (`boards/pandaboard/` + `board.conf`), then Phase 4 audio.
+- [x] **Repo restructure** (2026-11-03): `boards/pandaboard/` + `board.conf`, `appliance/`,
+  board-selectable scripts (`BOARD=`), container arch from `ALPINE_ARCH`. Verified: the rebuilt
+  image is identical apart from the intended overlay changes (`/etc/panda/*.conf`, first-boot
+  script reading them). Both conf files were installed on the live board and committed.
+- [ ] Phase 4: audio.
 
 ### Project layout
 
 ```
-container/Containerfile   armv7 Alpine build env (abuild, mkimage deps)
-container/Containerfile.cross  x86_64 Alpine + arm-none-eabi-gcc (kernel cross-compile)
-scripts/env.sh            shared settings (Alpine version, CROSS_COMPILE)
-scripts/alpine.sh         run a command/shell in the container (/work = repo)
-scripts/setup-keys.sh     one-time abuild key generation
-scripts/build-uboot.sh    build MLO + u-boot.img into build/u-boot-out/
-scripts/write-sdcard.sh   partition/format SD (FAT32 boot) and install files
-scripts/swap-uboot.sh     replace U-Boot files on a written card (FAT copies only)
-scripts/config-kernel.sh  kernel .config from omap2plus + our fragment
-scripts/build-kernel.sh   cross-build zImage, DTB, modules
-scripts/make-test-initramfs.sh  Phase 2 test boot files into build/testboot/
-scripts/update-boot-files.sh    copy a staging dir to the card's FAT partition (udisks, no sudo)
-scripts/build-package.sh  abuild one of our aports in the container
-scripts/build-image.sh    mkimage "pandaboard" profile into build/sdimage/
-image/                    mkimage profile + apkovl generator
-test/                     test init + audio test script
-aports/main/              our APKBUILDs (linux-pandaboard, u-boot-pandaboard, ...)
-build/                    sources and outputs (gitignored)
-keys/                     abuild keys (private key gitignored)
+boards/<board>/            everything board-specific (only pandaboard so far)
+  board.conf               hardware description: arch, kernel flavor, DTB, console,
+                           boot media, audio card/rate/mixer, BT, button, LEDs.
+                           Also installed on the device as /etc/panda/board.conf
+  mkimg.<board>.sh         mkimage profile (reads board.conf + appliance files)
+  write-sdcard.sh          SD card writer (pandaboard: raw-mode U-Boot + FAT32)
+  u-boot/build.sh, swap.sh U-Boot v2024.07 build / swap U-Boot on a written card
+  aports/<pkg>/            board packages (linux-pandaboard: APKBUILD,
+                           cross-build.sh, pandaboard.config fragment)
+appliance/                 board-independent
+  appliance.conf           hostname, speaker name, admin user (/etc/panda/appliance.conf)
+  packages.list            packages for the card's local repository
+  genapkovl.sh             first-boot overlay (users, SSH, doas, lbu, services)
+  authorized_keys          admin SSH keys, generated from ~/.ssh/*.pub (gitignored)
+aports/<pkg>/              generic packages (none yet)
+container/                 Containerfile (target-arch abuild/mkimage env),
+                           Containerfile.cross (x86_64 + arm-none-eabi-gcc)
+scripts/                   env.sh (BOARD selection), alpine.sh, build-container.sh,
+                           setup-keys.sh, build-package.sh, build-image.sh,
+                           update-boot-files.sh, serial-sysrq.py
+build/, packages/          outputs (gitignored)
+keys/                      abuild keys (private key gitignored)
 ```

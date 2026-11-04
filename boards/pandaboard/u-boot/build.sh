@@ -1,8 +1,11 @@
 #!/bin/bash
 # Build U-Boot v2024.07 for the PandaBoard (the last release with omap4_panda).
 # Output: build/u-boot-out/{MLO,u-boot.img}
+# Uses the host's cross compiler (Fedora gcc-arm-linux-gnu).
 set -euo pipefail
-source "$(dirname "$0")/env.sh"
+BOARD="$(basename "$(cd "$(dirname "$0")/.." && pwd)")"   # this script's board
+source "$(dirname "$0")/../../../scripts/env.sh"
+export ARCH=arm CROSS_COMPILE="${CROSS_COMPILE:-arm-linux-gnu-}"
 UBOOT_TAG=v2024.07
 SRC="$PROJECT_DIR/build/src/u-boot-${UBOOT_TAG#v}"
 OUT="$PROJECT_DIR/build/u-boot-out"

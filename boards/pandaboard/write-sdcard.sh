@@ -2,9 +2,9 @@
 # Partition and format an SD card for the PandaBoard and install the boot files.
 # DESTROYS ALL DATA on the given device.
 #
-# Usage: sudo scripts/write-sdcard.sh /dev/sdX [staging-dir]
+# Usage: sudo boards/pandaboard/write-sdcard.sh /dev/sdX [staging-dir]
 #   staging-dir: directory whose contents are copied to the FAT partition
-#                after MLO/u-boot.img (optional, e.g. the Alpine image).
+#                after MLO/u-boot.img (optional, normally build/sdimage).
 #
 # Layout: MBR, p1 = FAT32 (LBA, type 0x0c), boot flag, 512 MiB starting at 1 MiB.
 # The boot files go in twice, so either OMAP4 ROM boot method works:
@@ -13,7 +13,8 @@
 # UBOOT_DIR=<dir> selects another MLO/u-boot.img (default build/u-boot-out).
 # A report is written to build/sdcard-report.txt.
 set -euo pipefail
-source "$(dirname "$0")/env.sh"
+BOARD="$(basename "$(cd "$(dirname "$0")" && pwd)")"   # this script's board
+source "$(dirname "$0")/../../scripts/env.sh"
 DEV="${1:?usage: $0 /dev/sdX [staging-dir]}"
 STAGE="${2:-}"
 UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out}")"
@@ -22,7 +23,7 @@ UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out}")"
 [ -b "$DEV" ] || { echo "$DEV is not a block device"; exit 1; }
 [ "$(lsblk -dno TYPE "$DEV")" = disk ] || { echo "$DEV is not a whole disk"; exit 1; }
 for f in MLO u-boot.img; do
-    [ -f "$UBOOT_OUT/$f" ] || { echo "missing $UBOOT_OUT/$f, run scripts/build-uboot.sh"; exit 1; }
+    [ -f "$UBOOT_OUT/$f" ] || { echo "missing $UBOOT_OUT/$f, run boards/pandaboard/u-boot/build.sh"; exit 1; }
 done
 
 # Safety: refuse disks that host mounted system filesystems, and non-removable
@@ -52,7 +53,7 @@ SFDISK
 partprobe "$DEV"; udevadm settle
 PART=$(lsblk -lno PATH "$DEV" | sed -n 2p)
 for p in $(lsblk -lno PATH "$DEV" | tail -n +2); do umount "$p" 2>/dev/null || true; done
-mkfs.vfat -F 32 -n PANDABOOT "$PART" >/dev/null
+mkfs.vfat -F 32 -n "$BOOT_LABEL" "$PART" >/dev/null
 
 MNT=$(mktemp -d)
 trap 'umount "$MNT" 2>/dev/null; rmdir "$MNT"' EXIT

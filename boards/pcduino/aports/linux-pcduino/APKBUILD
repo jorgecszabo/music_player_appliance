@@ -1,0 +1,55 @@
+# Maintainer: Jorge Szabo <jorgecszabo@gmail.com>
+#
+# Linux LTS kernel for the pcDuino Lite (Allwinner A10) audio appliance.
+#
+# The kernel is cross-compiled natively on the x86_64 build host by
+# scripts/cross-build-kernel.sh into build/kernel-staging/<flavor>. This
+# APKBUILD only packages those files. scripts/build-package.sh runs
+# cross-build.sh first.
+# Config: _defconfig + _fragment; DTBs: _dtbs (relative to arch/arm/boot/dts/).
+# The Lite has no DTB of its own: it's the pcDuino without the NAND, with 512 MB.
+# Layout follows main/linux-lts so update-kernel / mkimage / the modloop
+# service work unchanged: release "<ver>-<pkgrel>-pcduino",
+# /boot/{vmlinuz,System.map,config}-pcduino, /boot/dtbs-pcduino/.
+_flavor=pcduino
+pkgname=linux-$_flavor
+pkgver=6.18.60
+pkgrel=0
+pkgdesc="Linux LTS kernel for the pcDuino Lite (Allwinner A10)"
+url="https://www.kernel.org"
+arch="armv7"
+license="GPL-2.0-only"
+depends="initramfs-generator"
+options="!strip !check !tracedeps"
+# The fragment is listed so its checksum is recorded with the package.
+source="pcduino.config"
+# Read by scripts/cross-build-kernel.sh (single-line values).
+# omap2plus as the generic baseline, its platform swapped for the A10 (see the fragment).
+_defconfig=omap2plus_defconfig
+_fragment=pcduino.config
+_dtbs="allwinner/sun4i-a10-pcduino.dtb"
+# The staged config must have this (catches a wrong or stale staging dir).
+# Required options (grep -xE patterns): the SoC, and USB audio (the appliance's
+# alternative output, audio-route.py).
+_kconfig_check="CONFIG_MACH_SUN4I=y CONFIG_SND_USB_AUDIO=[ym]"
+_staging="${PANDA_KERNEL_STAGING:-/work/build/kernel-staging/$_flavor}"
+
+package() {
+	local _rel="$pkgver-$pkgrel-$_flavor"
+	[ -f "$_staging"/usr/share/kernel/$_flavor/kernel.release ] \
+		|| die "no staged kernel in $_staging (run cross-build.sh)"
+	[ "$(cat "$_staging"/usr/share/kernel/$_flavor/kernel.release)" = "$_rel" ] \
+		|| die "staged kernel is not $_rel"
+	local _c
+	for _c in $_kconfig_check; do
+		grep -qxE "$_c" "$_staging"/boot/config-$_flavor \
+			|| die "staged config lacks $_c"
+	done
+
+	mkdir -p "$pkgdir"
+	cp -a "$_staging"/. "$pkgdir"/
+}
+
+sha512sums="
+38fda854ce2a1952cd0af090175bcd1f8282078aac6682ef5a1efacffbcd182ce53704b3e2c17647301786d656015d2b93ab168ca57d4c568c33b9c53b6a37f2  pcduino.config
+"

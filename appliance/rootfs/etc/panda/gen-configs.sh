@@ -34,7 +34,7 @@ out() { mkdir -p "$(dirname "$ROOT$1")"; cat > "$ROOT$1"; }
 
 # --- PipeWire ---------------------------------------------------------------------------
 if [ -n "${AUDIO_RATE:-}" ]; then
-	rates="    # $AUDIO_CARD only runs at $AUDIO_RATE Hz: resample everything to it.
+	rates="    # Fixed at $AUDIO_RATE Hz (board.conf AUDIO_RATE): everything is resampled to it.
     default.clock.rate          = $AUDIO_RATE
     default.clock.allowed-rates = [ $AUDIO_RATE ]"
 else

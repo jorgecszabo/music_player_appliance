@@ -216,9 +216,10 @@ These make it behave like a commercial speaker. Built during Phases 4–6.
   live updates via server-sent events. Data from `wpctl`/`pw-dump`, bluez D-Bus,
   `/proc` + `/sys`, `rc-status`. No framework, no build step.
 - LAN only (firewall to the local subnet). Optional HTTP basic auth.
-- **Check `lbu commit` atomicity** (does it write in place or write+rename?). If
-  it writes in place, wrap it so a power cut mid-save can't leave a truncated
-  overlay. This is the one write window on the card.
+- `lbu commit` atomicity: checked. It writes `<host>.apkovl.tar.gz.new` and then
+  `mv`s it over the old one, so a power cut mid-write keeps the old overlay; only
+  the FAT rename itself is a short non-atomic window. Add a `sync` + ro remount
+  after saving from the web page.
 
 **Not now** (revisit later): USB volume knob (none on hand), line-in
 passthrough, amplifier auto-power / HDMI-CEC, network updates, Home Assistant,
@@ -317,7 +318,9 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     setuid/sudo don't work under qemu-user. Needs `coreutils` (merge_config.sh
     uses `readlink -m`).
   - `image/mkimg.pandaboard.sh` profile + `image/genapkovl-pandaboard.sh` (hostname
-    `panda`, eth0 DHCP, chronyd, `LBU_MEDIA=mmcblk0p1`), built by
+    `panda`, eth0 DHCP, chronyd, **sshd with key-only root login**, keys from the build
+    host's `~/.ssh/*.pub` into `image/authorized_keys` (gitignored), `/root/.ssh` added
+    to lbu, `LBU_MEDIA=mmcblk0p1`), built by
     `scripts/build-image.sh` into `build/sdimage/`. Serial getty comes from
     `console=ttyS2` (initramfs adds it). The modloop gets TIInit explicitly
     (`modloopfw`).

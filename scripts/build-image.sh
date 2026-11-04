@@ -14,6 +14,11 @@ fi
 ls "$PROJECT_DIR"/packages/main/armv7/linux-pandaboard-*.apk >/dev/null \
     || { echo "build the kernel package first: scripts/build-package.sh linux-pandaboard"; exit 1; }
 mkdir -p "$PROJECT_DIR/build/image" "$PROJECT_DIR/build/mkimage-work"
+# Root's SSH keys for the image: this host's public keys unless already provided.
+if [ ! -s "$PROJECT_DIR/image/authorized_keys" ]; then
+    cat ~/.ssh/*.pub > "$PROJECT_DIR/image/authorized_keys" 2>/dev/null || true
+fi
+echo "authorized_keys: $(grep -c . "$PROJECT_DIR/image/authorized_keys" 2>/dev/null || echo 0) key(s)"
 
 ALPINE_ROOT=1 "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
     cp /root/.abuild/*.rsa.pub /etc/apk/keys/

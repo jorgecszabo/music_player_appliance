@@ -343,7 +343,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - Cleanup for the final kernel: OMAP remoteproc (DSP/IPU, 120 MB CMA, no
     firmware) and the omap4-keypad probe error. TWL6030 "vsel out of range"
     warnings are for the 1.2 GHz OPP the 4430 doesn't use, so they're harmless.
-- [~] **Phase 3** (2026-11-03): Alpine diskless image.
+- [x] **Phase 3** (2026-11-03): Alpine diskless image.
   - `aports/main/linux-pandaboard` (release `6.18.60-0-pandaboard`): the kernel is
     **cross-compiled** by `cross-build.sh` in an x86_64 Alpine container
     (`container/Containerfile.cross`, Alpine `arm-none-eabi-gcc` 16.1, about 10 min) into
@@ -375,7 +375,10 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     first-boot commit failed. Now the first-boot script runs `setup-lbu mmcblk0p1` and
     `setup-apkcache /media/mmcblk0p1/cache` itself. The live board was fixed by hand
     and committed.
-  - Still to do: power-yank test.
+  - **Power-yank test passed:** overlay reloads, SSH host key is unchanged, root
+    password and `panda` are kept, first-boot doesn't rerun, no FAT dirty/fsck
+    warnings, `lbu status` is clean.
+- [ ] Next: repo restructure (`boards/pandaboard/` + `board.conf`), then Phase 4 audio.
 
 ### Project layout
 

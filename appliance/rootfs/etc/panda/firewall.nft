@@ -1,0 +1,39 @@
+#!/usr/sbin/nft -f
+# Appliance firewall: accept anything from the local network, nothing else.
+# Spotify Soloist's zeroconf port is random, so this allows by source, not port.
+# Loaded by /etc/init.d/panda-firewall; the on-link IPv6 prefixes (set lan6_ra)
+# are filled in by /etc/panda/firewall.sh, since they come from router ads.
+
+table inet panda
+delete table inet panda
+
+table inet panda {
+	set lan4 {
+		type ipv4_addr; flags interval
+		elements = { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }
+	}
+	set lan6 {
+		type ipv6_addr; flags interval
+		elements = { fe80::/10, fc00::/7 }
+	}
+	set lan6_ra {
+		type ipv6_addr; flags interval
+	}
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif lo accept
+		ct state invalid drop
+		ct state established,related accept
+		# ICMPv6 carries neighbour discovery and router ads: required for IPv6.
+		meta l4proto { icmp, ipv6-icmp } accept
+		# DHCPv4 offers are broadcasts, not replies conntrack knows.
+		udp dport 68 accept
+		ip saddr @lan4 accept
+		ip6 saddr @lan6 accept
+		ip6 saddr @lan6_ra accept
+	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+	}
+}

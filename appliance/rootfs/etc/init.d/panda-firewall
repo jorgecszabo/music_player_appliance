@@ -1,0 +1,27 @@
+#!/sbin/openrc-run
+# Appliance firewall (nftables): accept the local network, drop the rest.
+# Rules: /etc/panda/firewall.nft. Helper: /etc/panda/firewall.sh.
+
+description="Firewall: local network only"
+
+depend() {
+	after modloop
+	before net
+	provide firewall
+}
+
+start() {
+	ebegin "Loading the firewall"
+	/etc/panda/firewall.sh start
+	eend $? || return 1
+	# Router ads arrive after boot: pick up the on-link IPv6 prefix soon
+	# (cron refreshes it every 15 minutes after that).
+	( for t in 10 20 30 60; do sleep $t; /etc/panda/firewall.sh update; done ) \
+		</dev/null >/dev/null 2>&1 &
+}
+
+stop() {
+	ebegin "Removing the firewall"
+	nft delete table inet panda 2>/dev/null
+	eend 0
+}

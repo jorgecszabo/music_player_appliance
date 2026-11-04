@@ -444,8 +444,32 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     remounted `hidepid=invisible` (verified hidden from `panda`). Session/cache in RAM.
   - mDNS: spotifyd's built-in responder claimed the hostname, so avahi renamed itself
     `panda-2.local`. Soloist's responder doesn't (avahi keeps `panda.local`). spotifyd removed.
-  - Next: shairport-sync, firewall (Soloist's zeroconf port is random, so allow the LAN, not ports),
-    startup volume, measurements, reboot test.
+  - **lbu bug found by an accidental power cut:** apk's built-in protected paths have
+    `@etc/init.d` (symlinks only), so `lbu commit` saved the runlevel links but not our init
+    scripts, and every speaker-*/panda-* service vanished on reboot. setup.sh now
+    `lbu include`s each of them. (Earlier checks passed only because the board hadn't rebooted.)
+  - **AirPlay (classic):** shairport-sync 5.5.1 as `speaker-shairport` (user speaker), name
+    from SPEAKER_NAME, `allow_session_interruption` on. Alpine's build has **no native
+    PipeWire backend** despite `--with-pw` in the APKBUILD (`shairport-sync -h`: alsa, pipe,
+    stdout), so it plays through the ALSA `pipewire` PCM. Advertised as `<id>@Panda` on
+    `_raop._tcp`. Tested with PipeWire's `module-raop-sink` (what Fedora would use) from a
+    throwaway container: stream linked into the graph, about 13% CPU. pyatv is not a usable test
+    sender: it announces L16 PCM, which shairport decodes as ALAC and crashes on (it
+    respawns; malformed input from the LAN can crash it). D-Bus/MPRIS name warnings are harmless.
+  - **Firewall:** nftables table `inet panda` (`/etc/panda/firewall.nft`, service
+    `panda-firewall` in the boot runlevel): drop by default, accept private IPv4, IPv6 link-local and
+    ULA, the on-link IPv6 prefixes (set `lan6_ra`, filled from the router-ad routes by
+    `/etc/panda/firewall.sh update` shortly after boot and every 15 min, since this LAN has a
+    global /64), ICMP/ICMPv6, DHCP. By source, not port (Soloist's zeroconf port is random).
+  - **Startup volume:** the sink comes up at 1.0 (0 dB) every boot (WirePlumber's default was
+    0.40 = -24 dB); the hardware gain from board.conf is the cap, each source sets its own
+    stream volume.
+  - **Reboot test passed** (clean reboot, after the accidental power cut): all services up,
+    volume 1.0, firewall loaded. Idle: 37 MB used (plus 232 MB tmpfs/shared), 63.5 C,
+    about 0-1% CPU besides PipeWire's feed.
+  - Next: build the Phase 4 stack into the image (rootfs + setup.sh at first boot, packages in
+    the apk cache, Soloist runtime on the card), so a fresh card needs only the API key; kernel r2
+    goes in with that image.
 
 ### Project layout
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refresh the firewall's on-link IPv6 prefixes (they come from router ads).
+exec /etc/panda/firewall.sh update

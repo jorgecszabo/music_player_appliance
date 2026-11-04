@@ -226,6 +226,18 @@ passthrough, amplifier auto-power / HDMI-CEC, network updates, Home Assistant,
 UPnP/DLNA local files, multiroom (Snapcast), IR remote / rotary encoder,
 display, radio presets / alarm.
 
+## Users and privileges (decided 2026-11-03)
+
+| User | Purpose | Notes |
+|---|---|---|
+| `root` | boot services, bluetoothd, sshd | no SSH login; password only for the serial console |
+| `panda` | admin login | SSH key only; `doas` nopass (the key is the gate) |
+| `speaker` | system user: PipeWire, WirePlumber, librespot, shairport-sync | no login; audio group; owns the PipeWire socket |
+| `panda-web` | system user: web page | no login; PipeWire + bluez access; doas allow-list only for `lbu commit`, `reboot`, `rc-service <audio services> restart` |
+
+Network-facing daemons never run as root. The firewall limits services to the
+LAN subnet.
+
 ## Phase 6: Hardening and polish
 
 - `rc_parallel`; only needed services; getty on serial only.
@@ -318,9 +330,12 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     setuid/sudo don't work under qemu-user. Needs `coreutils` (merge_config.sh
     uses `readlink -m`).
   - `image/mkimg.pandaboard.sh` profile + `image/genapkovl-pandaboard.sh` (hostname
-    `panda`, eth0 DHCP, chronyd, **sshd with key-only root login**, keys from the build
-    host's `~/.ssh/*.pub` into `image/authorized_keys` (gitignored), `/root/.ssh` added
-    to lbu, `LBU_MEDIA=mmcblk0p1`), built by
+    `panda`, eth0 DHCP, chronyd, `LBU_MEDIA=mmcblk0p1`; **SSH only as user `panda`**, key-only,
+    `PermitRootLogin no`; `doas` `permit nopass panda`; root keeps a password for the serial
+    console). The `panda` user is created by `/etc/local.d/panda-firstboot.start` (keys from
+    the build host's `~/.ssh/*.pub` via `image/authorized_keys`, gitignored; password field
+    `*`, because busybox's `!` would make OpenSSH refuse keys; `/home/panda/.ssh` added to lbu;
+    commits once). When running `setup-alpine`, skip its user-creation step. Built by
     `scripts/build-image.sh` into `build/sdimage/`. Serial getty comes from
     `console=ttyS2` (initramfs adds it). The modloop gets TIInit explicitly
     (`modloopfw`).

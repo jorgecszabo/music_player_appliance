@@ -294,3 +294,15 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
 - To test: `sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage` (erases the card;
   a second card keeps the current one as it is). First boot: about 1-2 min of setup, then a
   reboot into the appliance; then set the API key on the web page and pair the phone again.
+
+---
+
+# Unattended session 2: OTA updates (from the evening of 2026-11-04)
+
+The owner is away; the BeagleBoard-xM (192.168.0.57) is left on for this. Design and work
+order: PLAN.md, "OTA updates". Same ground rules as above (no Fedora changes, secrets, quiet
+audio, no Bluetooth), except: **writing the xM's card over SSH is allowed**, and breaking its
+installation is acceptable. If the board doesn't come back (no serial access from here:
+`/dev/ttyUSB0` needs group dialout), stop and ask the owner to reflash it.
+
+## Results log (session 2)

@@ -222,10 +222,29 @@ EOF
 # Pairing keys must survive reboots (saved by panda-bt after each pairing).
 grep -qx "+var/lib/bluetooth" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu include /var/lib/bluetooth
 
+# --- Chimes: synthesized once onto the boot media (slow on this CPU) ----------------
+chimes=/media/"$BOOT_MEDIA"/chimes
+sum=$(md5sum /etc/panda/chimes.py | cut -d" " -f1)
+if [ "$(cat "$chimes"/.source 2>/dev/null)" != "$sum" ]; then
+	log "synthesizing the chimes"
+	rm -rf /tmp/panda-chimes
+	if python3 /etc/panda/chimes.py /tmp/panda-chimes; then
+		echo "$sum" > /tmp/panda-chimes/.source
+		mount -o remount,rw /media/"$BOOT_MEDIA"
+		rm -rf "$chimes".new && cp -r /tmp/panda-chimes "$chimes".new && sync \
+			&& rm -rf "$chimes" && mv "$chimes".new "$chimes" || log "ERROR: installing the chimes failed"
+		sync
+		mount -o remount,ro /media/"$BOOT_MEDIA"
+	else
+		log "ERROR: chime synthesis failed"
+	fi
+	rm -rf /tmp/panda-chimes
+fi
+
 # --- Services -------------------------------------------------------------------
 rc-update add panda-firewall boot >/dev/null 2>&1 || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport bluetooth panda-bt crond; do
+	speaker-shairport bluetooth panda-bt panda-chime-boot crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

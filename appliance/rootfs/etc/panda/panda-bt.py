@@ -29,6 +29,8 @@ from dbus_next.service import ServiceInterface, method
 
 WINDOW_S = 120
 LONG_S = 5
+# Events with a chime (/etc/panda/chime.sh <event>).
+CHIMES = {"pairing-on", "pairing-off", "paired", "connected", "disconnected", "forgot-all"}
 AGENT_PATH = "/panda/agent"
 BLUEZ = "org.bluez"
 
@@ -120,6 +122,7 @@ class App:
         self.recent = []           # device paths, most recently connected first
         self.window_task = None
         self.forgetting = False
+        self.paired_at = -100.0
 
     # --- state ------------------------------------------------------------------
     @property
@@ -135,8 +138,15 @@ class App:
             self.led.set(any(d.get("Connected") for d in self.devices.values()))
 
     def event(self, name, detail=""):
-        # Hook for chimes (Phase 6).
         log("event", name, detail)
+        now = time.monotonic()
+        if name == "paired":
+            self.paired_at = now
+        elif name in ("connected", "pairing-off") and now - self.paired_at < 5:
+            return  # the "paired" chime already covers these
+        if name in CHIMES:
+            subprocess.Popen(["/etc/panda/chime.sh", name], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def check_pairing(self, device):
         if not self.window_open:
@@ -179,9 +189,9 @@ class App:
                 if path in self.recent:
                     self.recent.remove(path)
                 self.recent.insert(0, path)
-                self.event("bt-connected", name)
+                self.event("connected", name)
             else:
-                self.event("bt-disconnected", name)
+                self.event("disconnected", name)
         self.show_state()
 
     def on_message(self, msg):

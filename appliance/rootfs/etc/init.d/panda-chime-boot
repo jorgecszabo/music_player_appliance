@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+# Boot-complete chime: wait for the audio output to exist, then play "boot"
+# once the speaker services are up.
+
+description="Boot-complete chime"
+
+depend() {
+	need speaker-wireplumber
+	after speaker-soloist speaker-shairport panda-bt
+}
+
+start() {
+	ebegin "Boot chime"
+	local i=0
+	while [ $i -lt 30 ] && ! PIPEWIRE_RUNTIME_DIR=/run/speaker pw-cli ls Node 2>/dev/null \
+			| grep -q 'node.name = "alsa_output'; do
+		sleep 0.5; i=$((i + 1))
+	done
+	/etc/panda/chime.sh boot
+	eend 0
+}

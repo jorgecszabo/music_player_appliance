@@ -284,7 +284,12 @@ The Panda is 16 years old; the repo should survive it.
 ## Phase 6: Hardening and polish
 
 - `rc_parallel`; only needed services; getty on serial only.
-- Watchdog (`OMAP_WATCHDOG` + busybox watchdog).
+- [x] Watchdog (2026-11-04): busybox `watchdog` (boot runlevel) on `/dev/watchdog0` = OMAP4
+  WDT2 (4a314000, resets the chip; watchdog1 is WDT3 in the ABE domain), `-T 60 -t 10`
+  (WATCHDOG_DEV in board.conf). sysctl `kernel.panic=10` (Alpine: 120), `panic_on_oops=1`.
+  **Tested:** SIGSTOP on the daemon -> hardware reset after 58 s, everything back (BT
+  reconnected) after 103 s. Kernel r3 (not built yet, goes in with the image) adds
+  `SOFTLOCKUP_DETECTOR` + panic, `DETECT_HUNG_TASK` (report), `WATCHDOG_SYSFS`.
 - An `lbu-commit` helper: remount rw, commit, sync, remount ro. Run it only on
   config changes and new BT pairings.
 - Use a good-quality SD card (cheap cards can corrupt themselves on power loss

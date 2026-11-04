@@ -199,6 +199,13 @@ These make it behave like a commercial speaker. Built during Phases 4–6.
   restarts).
 
 **Recovery**
+- **Spotify API key (decided 2026-11-04):** lives only in `/etc/panda/soloist.key` (lbu
+  overlay, `0600 root:root`; speaker-soloist's start_pre reads it as root). A factory reset wipes
+  it with the rest of the overlay (it's a personal credential); Soloist stays off and the web
+  page says "No API key". The web page's Settings > Spotify Connect replaces it write-only:
+  the key goes to `web-admin.sh set-soloist-key` on **stdin** (never argv), which validates,
+  writes it atomically, commits, restarts Soloist and reports whether it runs. The page only
+  shows "set, last changed <time>".
 - **Factory reset:** hold S2 while powering on → wipe the saved config
   (lbu overlay) back to the image defaults, chime, reboot. Checked very early in
   boot. Needs a check of how early the button can be read relative to apkovl

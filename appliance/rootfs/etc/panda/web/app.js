@@ -96,6 +96,19 @@ function render(s) {
   renderSystem(s);
   renderServices(s);
   renderSave(s);
+  renderSpotify(s);
+}
+
+function renderSpotify(s) {
+  const sp = s.spotify;
+  if (!sp) setText("spotify-text", "Checking the API key...");
+  else if (sp.key_set) {
+    const when = sp.key_changed ? new Date(sp.key_changed).toLocaleString() : "?";
+    setText("spotify-text", `An API key is set (last changed ${when}).`);
+  } else {
+    setText("spotify-text", "No API key! Spotify Connect is off until you set one.");
+  }
+  $("spotify-text").className = sp && !sp.key_set ? "st-bad" : "";
 }
 
 function activeStream(s) {
@@ -411,6 +424,20 @@ function wireActions() {
       const r = await post("/api/name", { name });
       delete $("name-input").dataset.edited;
       info(r.result === "unchanged" ? "That's already the name." : "Renaming... the new name shows up in about 30 seconds.");
+    } catch (err) { oops(err); }
+  });
+
+  $("key-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("key-input");
+    const key = input.value.trim();
+    if (!key) return;
+    if (!await dialog("Replace the Spotify API key? Spotify Connect restarts.")) return;
+    try {
+      const r = await post("/api/spotify-key", { key });
+      input.value = "";
+      if (r.ok) info("New key saved. Spotify Connect is running again.");
+      else oops(new Error(`Key saved, but Spotify Connect is ${r.result}. Check the soloist log.`));
     } catch (err) { oops(err); }
   });
 

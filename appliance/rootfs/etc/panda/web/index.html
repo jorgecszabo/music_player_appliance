@@ -169,6 +169,17 @@
       <p class="small">Shown in Spotify, AirPlay and Bluetooth. Renaming restarts those services (about 30 s).</p>
     </fieldset>
     <fieldset class="group">
+      <legend>Spotify Connect</legend>
+      <p id="spotify-text">Checking the API key...</p>
+      <form id="key-form" class="button-row left">
+        <input type="password" class="field" id="key-input" maxlength="200" autocomplete="off"
+               spellcheck="false" placeholder="New API key" aria-label="New Spotify API key">
+        <button class="btn" type="submit">Set key</button>
+      </form>
+      <p class="small">From the Spotify for Developers dashboard (Soloist). The key is write-only:
+        this page can replace it but never shows it. Saved to the card; Spotify restarts.</p>
+    </fieldset>
+    <fieldset class="group">
       <legend>Save &amp; power</legend>
       <p id="lbu-text">Checking for unsaved changes...</p>
       <div class="button-row left">

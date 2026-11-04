@@ -11,6 +11,9 @@
 #   web-admin.sh chrony              time sync status
 #   web-admin.sh logs <name>         last lines of a service log
 #   web-admin.sh set-name <name>     rename the speaker (all services), save
+#   web-admin.sh set-soloist-key     new Spotify API key from stdin (never argv),
+#                                    save, restart Soloist, report if it runs
+#   web-admin.sh soloist-key-status  "set <mtime>" or "missing" (never the key)
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /etc/panda/board.conf
@@ -79,6 +82,22 @@ set-name)
 		&& rc-service speaker-shairport restart \
 		&& rc-service bluetooth restart && rc-service panda-bt start'
 	echo renaming ;;
+set-soloist-key)
+	# One line on stdin. Never echoed, never on a command line.
+	IFS= read -r key || true
+	key=$(printf '%s' "$key" | tr -d '\r')
+	printf '%s' "$key" | grep -Eq '^[A-Za-z0-9_.-]{16,200}$' || die "invalid key format"
+	f=/etc/panda/soloist.key
+	( umask 077; printf '%s\n' "$key" > "$f.new" ) && chown root:root "$f.new" && mv "$f.new" "$f"
+	unset key
+	logger -t panda-web "Spotify API key replaced from the web page"
+	lbu commit
+	rc-service speaker-soloist restart >/dev/null 2>&1 || true
+	sleep 6
+	if rc-service speaker-soloist status >/dev/null 2>&1; then echo running; else echo "not running"; fi ;;
+soloist-key-status)
+	f=/etc/panda/soloist.key
+	if [ -s "$f" ]; then echo "set $(date -r "$f" -u +%Y-%m-%dT%H:%M:%SZ)"; else echo missing; fi ;;
 *)
 	die "unknown action: ${1:-}" ;;
 esac

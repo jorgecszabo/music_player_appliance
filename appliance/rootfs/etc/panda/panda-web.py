@@ -14,6 +14,7 @@ firewall redirects port 80 to it. LAN only (firewall).
   POST /api/service          {"name": <service>} | {"name": "audio"}
   POST /api/system           {"action": "save" | "reboot"}
   POST /api/name             {"name": <speaker name>}
+  POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
 
 Privileged actions run /etc/panda/web-admin.sh through doas (it validates).
 Protections: Host header must name this device (DNS rebinding), and POSTs need
@@ -47,10 +48,10 @@ LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "panda-bt", "panda-we
         "panda-web-admin", "messages"]
 
 
-def run(cmd, timeout=10, env=None):
+def run(cmd, timeout=10, env=None, stdin=None):
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                              env=env).stdout
+                              env=env, input=stdin).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -116,7 +117,8 @@ class Collector:
         self.wake_slow = threading.Event()
         # (name, period in s), cheapest first.
         self.probes = [("services", 5, self.services), ("net", 10, self.net),
-                       ("pwtop", 10, self.pwtop), ("lbu", 15, self.lbu), ("sync", 30, self.sync)]
+                       ("pwtop", 10, self.pwtop), ("lbu", 15, self.lbu), ("sync", 30, self.sync),
+                       ("spotify", 30, self.spotify)]
 
     def active(self):
         return time.monotonic() < self.active_until
@@ -189,6 +191,7 @@ class Collector:
             "services": self.slow.get("services"),
             "sync": self.slow.get("sync"),
             "lbu": self.slow.get("lbu"),
+            "spotify": self.slow.get("spotify"),
         }
 
     def host(self, board, app):
@@ -262,6 +265,12 @@ class Collector:
         return {"reference": info.get("Reference ID", ""), "stratum": info.get("Stratum", ""),
                 "offset": info.get("System time", ""), "leap": info.get("Leap status", ""),
                 "raw": out.strip() if not info else ""}
+
+    def spotify(self):
+        """Whether an API key is set and when it changed. Never the key itself."""
+        out = run(ADMIN + ["soloist-key-status"]).split()
+        return {"key_set": bool(out) and out[0] == "set",
+                "key_changed": out[1] if len(out) > 1 else None}
 
     def lbu(self):
         out = run(ADMIN + ["lbu-status"])
@@ -463,7 +472,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         handler = {"/api/volume": self.volume, "/api/bt": self.bt,
                    "/api/service": self.service, "/api/system": self.system,
-                   "/api/name": self.name}.get(path)
+                   "/api/name": self.name, "/api/spotify-key": self.spotify_key}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -524,6 +533,20 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("names: 1-32 letters, digits, spaces and . _ - '")
         out = run(ADMIN + ["set-name", name], timeout=15)
         return {"ok": bool(out.strip()), "result": out.strip()}
+
+
+    def spotify_key(self, req):
+        key = str(req.get("key", "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{16,200}", key):
+            raise ValueError("that doesn't look like an API key")
+        out = run(ADMIN + ["set-soloist-key"], timeout=60, stdin=key + "\n").strip()
+        del key
+        COLLECTOR.refresh("spotify")
+        COLLECTOR.refresh("services")
+        COLLECTOR.refresh("lbu")
+        if out.endswith("running") and not out.endswith("not running"):
+            return {"ok": True, "result": "running"}
+        return {"ok": False, "result": out.splitlines()[-1] if out else "failed"}
 
 
 class Server(ThreadingHTTPServer):

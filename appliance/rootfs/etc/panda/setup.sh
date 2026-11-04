@@ -193,7 +193,13 @@ if [ -f "$new_rt" ] && ! cmp -s "$new_rt" "$soloist_dir"/soloist-runtime.squashf
 	[ "$rc" -eq 0 ] || { log "ERROR: installing the Soloist runtime failed"; exit 1; }
 fi
 [ -x "$soloist_dir"/soloist ] || /etc/panda/soloist-update.sh || log "WARNING: Soloist download failed"
-[ -s /etc/panda/soloist.key ] || log "WARNING: no /etc/panda/soloist.key: Soloist won't start"
+# The key is read by speaker-soloist's start_pre (as root) and passed to Soloist,
+# so only root needs to read it. (Not group speaker: panda-web is in that group.)
+if [ -s /etc/panda/soloist.key ]; then
+	chown root:root /etc/panda/soloist.key && chmod 0600 /etc/panda/soloist.key
+else
+	log "WARNING: no /etc/panda/soloist.key: Soloist won't start (set it on the web page)"
+fi
 
 # --- AirPlay (classic) : shairport-sync ---------------------------------------------
 cat > /etc/shairport-sync.conf <<EOF

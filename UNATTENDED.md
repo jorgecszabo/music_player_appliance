@@ -175,3 +175,47 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   setting (`raop.latency.ms` on the raop sink/discover module); not touched.
 - Upstream notes for later: Alpine shairport-sync APKBUILD configure flags; Alpine 3.24's
   PipeWire 1.6.8 raop-sink iov bug (fixed by 1.6.11 / master 696667af).
+
+### Task 2: tone, headroom, volume cap (done)
+
+- PipeWire filter-chain sink `panda-eq` (default sink; its volume is the master volume):
+  preamp -> 100 Hz low shelf -> 8 kHz high shelf at 96 kHz. Preamp = -(3 dB + largest boost), so
+  boosting can't clip. Measured: a -6 dBFS tone comes out at exactly -9.00 dBFS.
+- Volume cap = the codec's hardware gain (board.conf `AUDIO_HW_VOLUME_CONTROL/_MAX/_STEP_DB`),
+  applied at boot by panda-audio-init from `/etc/panda/audio.conf`.
+- Web page: Bass/Treble/Max volume sliders + Flat; `web-admin.sh set-audio` validates and
+  applies live (pw-cli Props on the filter node, amixer for the cap); saved 15 s after the
+  last change. Gotcha: Alpine ships `libpipewire-module-filter-chain` in **pipewire-pulse**.
+
+### Task 3: last source wins (done; Spotify/Bluetooth paths untested)
+
+- `speaker-arbiter` (user speaker): `pw-dump --monitor` through a pty (it block-buffers pipes),
+  parsed per object (updates are partial, the top-level array stays open; re-parsing per line
+  was quadratic). A new playing source stops the others: Spotify `soloist ctl pause` (Soloist
+  now has `-w 127.0.0.1:47000`), Bluetooth AVRCP Pause, Radio via mpv IPC `stop`; AirPlay and
+  anything still playing after 2 s are muted, and unmuted when they're the only source again.
+- Tested: AirPlay vs a local stream (muted -9 -> -60 dB while the newcomer played, unmuted
+  after), and AirPlay stopping the radio. Spotify pause and Bluetooth pause need the phone
+  (Soloist was logged out by the restarts; the owner picks "Panda" in the app once).
+
+### Task 3b: internet radio (done)
+
+- `speaker-radio`: mpv idle, audio only, `--ao=pipewire`, locked down (`--config=no
+  --load-scripts=no --ytdl=no`), reconnects, JSON IPC socket `/run/speaker/radio.sock` (0660,
+  group speaker; a stale socket must be removed before start or mpv's new 0600 one replaces
+  the chmodded file). About +57 MiB of RAM for mpv and its libraries.
+- panda-web talks to radio-browser.info server-side (all.api.radio-browser.info, descriptive
+  User-Agent, `/json/url/<uuid>` to count the click and resolve the URL), so the page keeps
+  `connect-src 'self'`. Search by name/genre/country, top voted, popular, favorites (★, stored
+  in `/var/lib/panda-web/radio-favorites.json`, in lbu, debounced save).
+- "Radio Tuner" window: amber hi-fi display with station + ICY song title, results table.
+- Tested: Radio Paradise AAC 320k, ICY title shown, 0 xruns, mpv about 21% of one core.
+
+### Task 4: now playing (done; Spotify untested)
+
+- AirPlay: shairport metadata pipe -> `/run/speaker/nowplaying.json`. Fedora's PipeWire sends
+  no track info, only the sender (`snua`, `clip`): the LCD shows "AirPlay - PipeWire/1.6.11
+  (192.168.0.110)". iPhone/Mac title/artist (`minm`/`asar`) are parsed too.
+- Spotify: `soloist ctl now --json` polled every 5 s while its stream plays (field names
+  guessed defensively; needs a logged-in session to test).
+- Radio: ICY title from mpv. Bluetooth: AVRCP track from panda-bt (already there).

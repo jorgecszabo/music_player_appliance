@@ -250,6 +250,8 @@ function renderNowPlaying(s) {
       title = `${r.station.name}${r.title ? " - " + r.title : ""}`;
     } else if (np && np.title) {
       title = `${np.artist ? np.artist + " - " : ""}${np.title}`;
+    } else if (np && np.client) {
+      title = `${act.source} - ${np.client}${np.client_ip ? " (" + np.client_ip + ")" : ""}`;
     } else {
       title = `${act.source}${act.device ? " - " + act.device : ""}`;
     }

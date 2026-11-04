@@ -96,6 +96,14 @@ class NowPlaying:
             self.data[source] = cur
             self.write()
 
+    def drop(self, source, *keys):
+        with self.lock:
+            cur = self.data.get(source)
+            if cur:
+                for k in keys:
+                    cur.pop(k, None)
+                self.write()
+
     def clear(self, source):
         with self.lock:
             if self.data.pop(source, None) is not None:
@@ -304,7 +312,8 @@ asyncio.run(main(sys.argv[1]))
 # --- now playing: AirPlay (shairport-sync metadata pipe) ------------------------------
 ITEM = re.compile(r"<item><type>([0-9a-f]{8})</type><code>([0-9a-f]{8})</code><length>(\d+)</length>"
                   r"(?:\s*<data encoding=\"base64\">\s*([A-Za-z0-9+/=\s]*?)</data>)?</item>", re.S)
-FIELDS = {"minm": "title", "asar": "artist", "asal": "album"}
+# Track info (iPhone/Mac senders) and the sender itself (PipeWire sends no track info).
+FIELDS = {"minm": "title", "asar": "artist", "asal": "album", "snua": "client", "clip": "client_ip"}
 
 
 def airplay_meta():
@@ -325,6 +334,8 @@ def airplay_meta():
                         if code in FIELDS and data:
                             val = base64.b64decode("".join(data.split())).decode("utf-8", "replace")
                             NOW.set("AirPlay", **{FIELDS[code]: val})
+                        elif code == "pbeg":   # play stream begin: forget the last track
+                            NOW.drop("AirPlay", "title", "artist", "album")
                         elif code == "pend":   # play stream end
                             NOW.clear("AirPlay")
         except FileNotFoundError:

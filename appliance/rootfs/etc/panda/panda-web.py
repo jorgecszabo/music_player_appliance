@@ -694,6 +694,11 @@ class Handler(BaseHTTPRequestHandler):
         if action == "reboot":
             run(ADMIN + ["reboot"])
             return {"ok": True}
+        if action == "factory-reset-check":
+            return {"ok": True, "result": run(ADMIN + ["factory-reset-dry"]).strip()}
+        if action == "factory-reset":
+            out = run(ADMIN + ["factory-reset"], timeout=20).strip()
+            return {"ok": out == "resetting", "result": out}
         raise ValueError("unknown action")
 
     def name(self, req):

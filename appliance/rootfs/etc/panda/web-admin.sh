@@ -14,6 +14,8 @@
 #   web-admin.sh set-soloist-key     new Spotify API key from stdin (never argv),
 #                                    save, restart Soloist, report if it runs
 #   web-admin.sh soloist-key-status  "set <mtime>" or "missing" (never the key)
+#   web-admin.sh factory-reset       restore the factory overlay and reboot
+#   web-admin.sh factory-reset-dry   only show what a factory reset would do
 #   web-admin.sh set-audio <bass dB> <treble dB> <cap step>
 #                                    tone + volume cap: audio.conf, applied live
 set -eu
@@ -98,6 +100,13 @@ set-soloist-key)
 	rc-service speaker-soloist restart >/dev/null 2>&1 || true
 	sleep 6
 	if rc-service speaker-soloist status >/dev/null 2>&1; then echo running; else echo "not running"; fi ;;
+factory-reset)
+	logger -t panda-web "factory reset requested from the web page"
+	/etc/panda/factory-reset.sh --dry-run >/dev/null || die "no factory overlay on the card"
+	bg /etc/panda/factory-reset.sh
+	echo resetting ;;
+factory-reset-dry)
+	/etc/panda/factory-reset.sh --dry-run 2>&1 || true ;;
 set-audio)
 	b="${2:-}" t="${3:-}" m="${4:-}"
 	for v in "$b" "$t"; do

@@ -604,6 +604,19 @@ function wireActions() {
     $("save-btn").disabled = false;
   });
 
+  $("reset-btn").addEventListener("click", async () => {
+    let chk;
+    try { chk = await post("/api/system", { action: "factory-reset-check" }); } catch (e) { return oops(e); }
+    if (/no factory overlay|damaged/.test(chk.result || "")) return oops(new Error(chk.result));
+    if (!await dialog("Factory reset? This forgets ALL saved settings: Bluetooth phones, the Spotify API key, tone, radio favorites and the speaker name.", { title: "Factory Reset" })) return;
+    if (!await dialog("Really? This can't be undone. The speaker restarts with factory settings.", { title: "Factory Reset", icon: "X", kind: "err" })) return;
+    try {
+      const r = await post("/api/system", { action: "factory-reset" });
+      if (r.ok) info("Resetting... The speaker restarts in a moment with factory settings.");
+      else oops(new Error(r.result || "failed"));
+    } catch (err) { oops(err); }
+  });
+
   $("reboot-btn").addEventListener("click", async () => {
     if (!await dialog("Are you sure you want to restart the speaker? Unsaved changes are lost.", { title: "Shut Down Panda" })) return;
     try {

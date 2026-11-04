@@ -307,6 +307,18 @@ for d in /var/lib/bluetooth/*/cache; do
 	grep -qx -- "-${d#/}" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu exclude "$d"
 done
 
+# --- Factory overlay for factory resets (pushed by deploy.sh from the image) ---------
+new_fo=/tmp/panda-deploy/factory.apkovl.tar.gz
+fo=/media/"$BOOT_MEDIA"/factory/"$HOSTNAME".apkovl.tar.gz
+if [ -f "$new_fo" ] && ! cmp -s "$new_fo" "$fo"; then
+	log "installing the factory overlay on the boot media"
+	mount -o remount,rw /media/"$BOOT_MEDIA"
+	mkdir -p "$(dirname "$fo")" && cp "$new_fo" "$fo.new" && sync && mv "$fo.new" "$fo" \
+		|| log "ERROR: installing the factory overlay failed"
+	sync
+	mount -o remount,ro /media/"$BOOT_MEDIA"
+fi
+
 # --- Chimes: synthesized once onto the boot media (slow on this CPU) ----------------
 chimes=/media/"$BOOT_MEDIA"/chimes
 sum=$(md5sum /etc/panda/chimes.py | cut -d" " -f1)
@@ -338,6 +350,7 @@ EOF
 
 # --- Services -------------------------------------------------------------------
 rc-update add panda-firewall boot >/dev/null 2>&1 || true
+rc-update add panda-reset-button boot >/dev/null 2>&1 || true
 if [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ]; then
 	rc-update add watchdog boot >/dev/null 2>&1 || true
 	rc-service watchdog restart >/dev/null 2>&1 || log "WARNING: the watchdog failed to start"

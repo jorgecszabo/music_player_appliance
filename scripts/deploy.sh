@@ -25,6 +25,12 @@ if [ -f "$RT" ]; then
 fi
 
 echo ">>> deploying to $HOST"
+# Factory overlay (restored by a factory reset): the image's original apkovl.
+FACTORY="$PROJECT_DIR/build/sdimage/$(. "$APPLIANCE_DIR/appliance.conf"; echo "$HOSTNAME").apkovl.tar.gz"
+if [ -f "$FACTORY" ]; then
+    mkdir -p "$STAGE/tmp/panda-deploy"; cp "$FACTORY" "$STAGE/tmp/panda-deploy/factory.apkovl.tar.gz"
+fi
+
 # Our own packages (aports/) that the appliance uses instead of Alpine's.
 for p in shairport-sync; do
     for f in "$PROJECT_DIR"/packages/main/"$ALPINE_ARCH"/"$p"-[0-9]*.apk \

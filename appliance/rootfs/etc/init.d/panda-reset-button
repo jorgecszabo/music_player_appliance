@@ -1,0 +1,57 @@
+#!/sbin/openrc-run
+# Factory reset by button: hold S2 (board.conf BUTTON_*) while powering on.
+# Checked early in boot: if the button is down, both LEDs blink fast for 5 s;
+# still held at the end -> factory reset (/etc/panda/factory-reset.sh).
+# Released earlier -> normal boot. Never blocks boot otherwise.
+
+description="Factory reset when S2 is held at power-on"
+
+depend() {
+	need localmount
+	after modules hwdrivers
+	before speaker-pipewire panda-bt
+}
+
+start() {
+	. /etc/panda/board.conf
+	[ -n "${BUTTON_INPUT_NAME:-}" ] || return 0
+	ebegin "Checking the reset button"
+	if python3 - "$BUTTON_INPUT_NAME" "${BUTTON_KEY:-BTN_0}" "${LED_STATUS:-}" "${LED_BT:-}" <<-'EOF'
+		import sys, time
+		try:
+		    import evdev
+		except ImportError:
+		    sys.exit(1)
+		name, key, leds = sys.argv[1], sys.argv[2], [l for l in sys.argv[3:] if l]
+		code = evdev.ecodes.ecodes.get(key)
+		dev = next((evdev.InputDevice(p) for p in evdev.list_devices()
+		            if evdev.InputDevice(p).name == name), None)
+		if dev is None or code is None or code not in dev.active_keys():
+		    sys.exit(1)                      # not held: normal boot
+		def led(trigger, on=None):
+		    for l in leds:
+		        try:
+		            open(f"/sys/class/leds/{l}/trigger", "w").write(trigger)
+		            if trigger == "timer":
+		                open(f"/sys/class/leds/{l}/delay_on", "w").write("80")
+		                open(f"/sys/class/leds/{l}/delay_off", "w").write("80")
+		        except OSError:
+		            pass
+		led("timer")
+		end = time.monotonic() + 5
+		while time.monotonic() < end:
+		    if code not in dev.active_keys():
+		        led("heartbeat")
+		        sys.exit(1)                  # released: changed their mind
+		    time.sleep(0.1)
+		sys.exit(0)                          # held for 5 s: reset
+	EOF
+	then
+		eend 0
+		ewarn "S2 held: factory reset"
+		/etc/panda/factory-reset.sh
+	else
+		eend 0
+	fi
+	return 0
+}

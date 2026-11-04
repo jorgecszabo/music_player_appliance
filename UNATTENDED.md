@@ -219,3 +219,17 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
 - Spotify: `soloist ctl now --json` polled every 5 s while its stream plays (field names
   guessed defensively; needs a logged-in session to test).
 - Radio: ICY title from mpv. Bluetooth: AVRCP track from panda-bt (already there).
+
+### Task 5: factory reset (done; real reset not run)
+
+- `/etc/panda/factory-reset.sh [--dry-run]`: restores the **factory overlay**
+  (`<boot>/factory/<hostname>.apkovl.tar.gz`) over the saved one, removes other overlays,
+  reboots. Refuses without a valid factory copy: in diskless Alpine `lbu commit` overwrites
+  the image's original overlay, and deleting it would boot a system with no network or SSH.
+- deploy.sh pushes the image's original overlay (build/sdimage) as the factory copy; for now
+  that's the Phase 3 overlay (a reset would need `scripts/deploy.sh` afterwards). Task 7's
+  image makes first boot run the full setup, and its overlay becomes the factory copy.
+- Button: `panda-reset-button` (boot runlevel): S2 held at power-on -> both LEDs blink fast,
+  still held after 5 s -> reset; released -> normal boot. Tested the not-held path (1.35 s,
+  with the factory overlay moved away as a safety net). Not tested with the button pressed.
+- Web page: Settings > "Factory reset..." (pre-check, two confirmation dialogs).

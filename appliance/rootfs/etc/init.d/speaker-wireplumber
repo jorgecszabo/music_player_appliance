@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+# WirePlumber session manager for the system-wide PipeWire (user "speaker").
+# Profile "panda" (see /etc/wireplumber/wireplumber.conf.d/) builds on the
+# stock "main-embedded" profile: system-wide and stateless.
+
+description="WirePlumber session manager (system-wide, user speaker)"
+supervisor=supervise-daemon
+command=/usr/bin/wireplumber
+command_args="--profile panda"
+command_user="speaker:speaker"
+directory=/var/lib/speaker
+output_log=/var/log/speaker/wireplumber.log
+error_log=/var/log/speaker/wireplumber.log
+respawn_delay=2
+respawn_max=0
+supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker --env HOME=/var/lib/speaker"
+rc_ulimit="-r 95 -e 40"
+
+depend() {
+	need speaker-pipewire
+}
+
+start_pre() {
+	# Wait for PipeWire's socket (up to 10 s), so we don't start just to fail.
+	local i=0
+	while [ ! -S /run/speaker/pipewire-0 ] && [ $i -lt 100 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+}

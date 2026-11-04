@@ -1,0 +1,27 @@
+#!/sbin/openrc-run
+# PipeWire media server, system-wide, as the unprivileged "speaker" user.
+# Clients (WirePlumber, spotifyd, shairport-sync) run as "speaker" too and
+# connect through /run/speaker/pipewire-0.
+
+description="PipeWire media server (system-wide, user speaker)"
+supervisor=supervise-daemon
+command=/usr/bin/pipewire
+command_user="speaker:speaker"
+directory=/var/lib/speaker
+output_log=/var/log/speaker/pipewire.log
+error_log=/var/log/speaker/pipewire.log
+respawn_delay=2
+respawn_max=0
+supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker --env HOME=/var/lib/speaker"
+# No rtkit on the appliance: let PipeWire's RT module raise its own priority.
+rc_ulimit="-r 95 -e 40 -l 65536"
+
+depend() {
+	need localmount
+	after panda-audio-init
+}
+
+start_pre() {
+	checkpath --directory --owner speaker:speaker --mode 0750 \
+		/run/speaker /var/lib/speaker /var/log/speaker
+}

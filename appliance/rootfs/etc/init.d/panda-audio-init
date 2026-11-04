@@ -1,0 +1,36 @@
+#!/sbin/openrc-run
+# Apply the board's mixer settings (AUDIO_MIXER in /etc/panda/board.conf) at
+# boot, before PipeWire opens the card. Nothing is saved to the boot media:
+# the settings come from board.conf every boot.
+
+description="Set up the audio hardware mixer from board.conf"
+
+depend() {
+	need localmount
+	after modules hwdrivers mdev
+	before speaker-pipewire
+}
+
+start() {
+	. /etc/panda/board.conf
+	ebegin "Setting up audio mixer for $AUDIO_CARD"
+	# The sound card registers asynchronously (deferred probe); wait for it.
+	local i=0
+	while [ ! -e /proc/asound/"$AUDIO_CARD" ] && [ $i -lt 100 ]; do
+		sleep 0.1; i=$((i + 1))
+	done
+	if [ ! -e /proc/asound/"$AUDIO_CARD" ]; then
+		eend 1 "sound card $AUDIO_CARD not found"
+		return 1
+	fi
+	local rc=0 line control value
+	while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		control="${line%%=*}"; value="${line#*=}"
+		amixer -q -c "$AUDIO_CARD" sset "$control" "$value" \
+			|| { ewarn "amixer: could not set '$control' to '$value'"; rc=1; }
+	done <<-MIXER
+	$AUDIO_MIXER
+	MIXER
+	eend $rc
+}

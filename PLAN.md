@@ -362,6 +362,11 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     `scripts/build-image.sh` into `build/sdimage/`. Serial getty comes from
     `console=ttyS2` (initramfs adds it). The modloop gets TIInit explicitly
     (`modloopfw`).
+  - First boot hung in OpenRC's dependency scan: `sshd` blocked in `getrandom()`. The
+    A9 has no fast cycle counter (jitter entropy runs off the 32 kHz clock) and
+    `omap_rng` was a module, not loaded before the modloop. **Fix: `HW_RANDOM` and
+    `HW_RANDOM_OMAP` built in** (kernel r1). Diagnosed with `scripts/serial-sysrq.py t`.
+  - Added avahi + dbus so `panda.local` resolves (also needed for Spotify/AirPlay discovery).
   - Still to do: boot, setup-alpine/lbu, power-yank test.
 
 ### Project layout

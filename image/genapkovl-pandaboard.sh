@@ -41,7 +41,9 @@ EOT
 
 makefile root:root 0644 "$tmp"/etc/apk/world <<EOT
 alpine-base
+avahi
 chrony
+dbus
 doas
 openssh
 EOT
@@ -105,6 +107,8 @@ rc_add syslog boot
 rc_add networking boot
 
 rc_add chronyd default
+rc_add dbus default
+rc_add avahi-daemon default
 rc_add sshd default
 rc_add local default
 

@@ -44,7 +44,7 @@ profile_pandaboard() {
 	pandaboard_extlinux=yes
 	# U-Boot + extlinux boot; no GRUB/EFI (profile_base enables it for ARM).
 	grub_mod=
-	apks="alpine-base apk-cron busybox chrony doas openssh openssl tzdata wget
+	apks="alpine-base apk-cron avahi busybox chrony dbus doas openssh openssl tzdata wget
 		e2fsprogs dosfstools alsa-utils bluez bluez-deprecated"
 	apkovl="genapkovl-pandaboard.sh"
 	hostname="panda"

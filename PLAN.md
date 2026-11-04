@@ -470,7 +470,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
   - Image integration is deferred until Phases 5-6 are done, so the image is built once
     (rootfs + setup.sh at first boot, packages in the apk cache, Soloist runtime on the card,
     kernel r2). A fresh card should then need only the Soloist API key.
-- [~] **Phase 5** (2026-11-04): Bluetooth speaker.
+- [x] **Phase 5** (2026-11-04): Bluetooth speaker.
   - Onboard WL1271 is enough: fixed public address 64:9C:8E:AE:00:1F, BR/EDR only.
   - WirePlumber `hardware.bluetooth = required` (`optional` means "only if something wants
     it", so the monitor never loaded), roles `[ a2dp_sink ]`, codecs SBC/SBC-XQ/AAC, no HFP/HSP,
@@ -485,7 +485,8 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     start; event hook for the Phase 6 chimes.
   - **Works (2026-11-04):** POCO X8 Pro (Android) paired with the button, plays with **AAC**,
     phone volume buttons control the stream, 0 errors, about 6% CPU total, 63.5 C.
-  - Next: reboot test (pairing persists, auto-reconnect, same controller address).
+  - **Power-cut test passed:** after pulling the plug the pairing loaded from the overlay, same
+    controller address, and panda-bt reconnected to the phone by itself.
 
 ### Project layout
 

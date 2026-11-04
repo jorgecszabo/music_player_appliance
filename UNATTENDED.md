@@ -125,4 +125,39 @@ tasks are committed.
 
 ## Results log
 
-(Filled in as tasks complete.)
+**Reminder for the end of the night:** the volume cap is at step 0 (-30 dB) for quiet testing.
+Set it back to 15 (0 dB) before finishing (web-admin.sh set-audio 0 0 15).
+
+### Task 1: AirPlay (done)
+
+Method: test signals sent from throwaway PipeWire containers (Alpine 1.6.8, then a Fedora 44
+image with PipeWire 1.6.11 = the owner's version), the board's output recorded digitally
+(sink monitor, f32 96 kHz) and analyzed (overs, level dips, sine-predictor discontinuities).
+
+- **Found: the codec ran at full hardware gain.** WirePlumber's fallback profile mapped the
+  output volume onto the TWL6040 `Headset` control (100% = 0 dB), overriding board.conf's -10 dB.
+  Fixed with `api.alsa.soft-mixer` (software volume only). This also made the board overload
+  the PC line-in. (fcd4c2c)
+- **Clipping: confirmed and fixed.** A 0 dBFS fs/4 sine at 45 deg (true peak +3 dB) arrived at
+  +0.93 dBFS with 14449 samples over full scale (44.1 -> 96 kHz resampler overs, no headroom).
+  With the task 2 tone filter's -3 dB headroom: -2.07 dBFS, 0 overs.
+- **Native PipeWire backend for shairport-sync.** Alpine's package passes `--with-pw`/`--with-pa`,
+  which 5.x ignores (`--with-pipewire`/`--with-pulseaudio`), so it had no PipeWire backend and
+  used the pipewire-alsa plugin. Local aport `aports/shairport-sync` (r100) fixes the flags and
+  drops PulseAudio/D-Bus/MPRIS. Delay-measurement jitter ("Av Sync Window") 9-15 ms -> 2-3 ms.
+  deploy.sh ships our packages; setup.sh installs them (apk cache, world pinned).
+- **Choppiness: not reproducible with the owner's PipeWire.** With Alpine's PipeWire 1.6.8 as
+  the sender there's a click exactly every 2^20 frames (23.778 s): `module-raop-sink`
+  `stream_send_packet` encodes only `iov[1]` and drops `iov[2]` when a packet straddles the RTP
+  ring buffer (2^22 bytes) wrap. PipeWire 1.6.11 (Fedora) passes all iovs; with a Fedora 44
+  sender: 0 clicks, no dips, steady level over 60 s. Remaining sub-sample steps (-41 dB re
+  signal) are shairport's sync corrections; inaudible. Receiver-side knobs (interpolation soxr,
+  drift tolerance 10/25 ms, disable_synchronization, ignore_volume_control) made no difference,
+  so the config stays at the defaults (`interpolation = "basic"`).
+  If the owner still hears chops: test again (the gain/clipping fixes may have been it); else
+  look at the network path (UDP `RcvbufErrors` was 73 at one point, 0 during tests).
+- **Delay: set by the sender.** shairport logs "New latency: 66150" frames (1.5 s) requested by
+  PipeWire's raop sink, plus about 0.1 s of PipeWire output buffering. Lowering it is a Fedora-side
+  setting (`raop.latency.ms` on the raop sink/discover module); not touched.
+- Upstream notes for later: Alpine shairport-sync APKBUILD configure flags; Alpine 3.24's
+  PipeWire 1.6.8 raop-sink iov bug (fixed by 1.6.11 / master 696667af).

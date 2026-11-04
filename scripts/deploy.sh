@@ -25,6 +25,15 @@ if [ -f "$RT" ]; then
 fi
 
 echo ">>> deploying to $HOST"
+# Our own packages (aports/) that the appliance uses instead of Alpine's.
+for p in shairport-sync; do
+    for f in "$PROJECT_DIR"/packages/main/"$ALPINE_ARCH"/"$p"-[0-9]*.apk \
+             "$PROJECT_DIR"/packages/main/"$ALPINE_ARCH"/"$p"-openrc-[0-9]*.apk; do
+        [ -f "$f" ] || continue
+        mkdir -p "$STAGE/tmp/panda-deploy/apks"; cp "$f" "$STAGE/tmp/panda-deploy/apks/"
+    done
+done
+
 # List deploy artifacts by file, not the tmp/ dir: a tmp/ entry would reset
 # /tmp's mode (sticky bit) on extraction.
 tar -C "$STAGE" --owner=0 --group=0 -czf - etc $(cd "$STAGE" && find tmp -type f 2>/dev/null) \

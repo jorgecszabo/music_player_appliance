@@ -291,6 +291,9 @@ The Panda is 16 years old; the repo should survive it.
 ## Phase 6: Hardening and polish
 
 - `rc_parallel`; only needed services; getty on serial only.
+- [x] Tone + volume cap + headroom (2026-11-04): filter-chain sink `panda-eq` (see
+  UNATTENDED.md task 2). AirPlay: native PipeWire shairport build, clipping fixed, codec gain
+  bug fixed (UNATTENDED.md task 1).
 - [x] Watchdog (2026-11-04): busybox `watchdog` (boot runlevel) on `/dev/watchdog0` = OMAP4
   WDT2 (4a314000, resets the chip; watchdog1 is WDT3 in the ABE domain), `-T 60 -t 10`
   (WATCHDOG_DEV in board.conf). sysctl `kernel.panic=10` (Alpine: 120), `panic_on_oops=1`.

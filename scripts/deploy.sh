@@ -17,17 +17,26 @@ mkdir -p "$STAGE/etc/panda"
 cp "$BOARD_DIR/board.conf" "$STAGE/etc/panda/board.conf"
 cp "$APPLIANCE_DIR/appliance.conf" "$STAGE/etc/panda/appliance.conf"
 
+# Large artifacts the setup script installs onto the boot media.
+RT="$PROJECT_DIR/build/soloist/soloist-runtime-$ALPINE_ARCH.squashfs"
+if [ -f "$RT" ]; then
+    mkdir -p "$STAGE/tmp/panda-deploy"
+    cp "$RT" "$STAGE/tmp/panda-deploy/soloist-runtime.squashfs"
+fi
+
 echo ">>> deploying to $HOST"
-tar -C "$STAGE" --owner=0 --group=0 -czf - etc \
-    | ssh -o BatchMode=yes "$HOST" 'doas tar -C / -xzof - && doas sh /etc/panda/setup.sh'
+# List deploy artifacts by file, not the tmp/ dir: a tmp/ entry would reset
+# /tmp's mode (sticky bit) on extraction.
+tar -C "$STAGE" --owner=0 --group=0 -czf - etc $(cd "$STAGE" && find tmp -type f 2>/dev/null) \
+    | ssh -o BatchMode=yes "$HOST" 'doas tar -C / -xzof - && doas sh /etc/panda/setup.sh; rc=$?; doas rm -rf /tmp/panda-deploy; exit $rc'
 
 if [ "$RESTART" = "--restart" ]; then
     ssh -o BatchMode=yes "$HOST" 'doas sh -c "
         # Stop dependents first, then start in order (restarting pipewire on
         # its own stops wireplumber without openrc noticing).
-        rc-service speaker-spotifyd stop; rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
+        rc-service speaker-soloist stop; rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
         rc-service panda-audio-init restart || exit 1
         rc-service speaker-pipewire start && rc-service speaker-wireplumber start || exit 1
-        rc-service speaker-spotifyd start || exit 1
+        rc-service speaker-soloist start || exit 1
         sleep 2; rc-status default | grep -E \"panda|speaker\""'
 fi

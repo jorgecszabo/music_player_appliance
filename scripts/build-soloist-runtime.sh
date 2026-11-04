@@ -4,7 +4,7 @@
 # and SPA plugins, packed as a read-only squashfs.
 # Output: build/soloist/soloist-runtime-<arch>.squashfs
 # On the device it's mounted at /opt/soloist-runtime, and Soloist runs as
-#   /opt/soloist-runtime/lib/ld-linux-armhf.so.3 --library-path /opt/soloist-runtime/lib soloist
+#   /opt/soloist-runtime/lib/ld.so --library-path /opt/soloist-runtime/lib soloist
 # with PIPEWIRE_MODULE_DIR / SPA_PLUGIN_DIR / PIPEWIRE_CONFIG_DIR pointing into it.
 # Contains only Debian open-source packages; the Soloist binary is NOT included
 # (it may not be redistributed; the device downloads it from Spotify).
@@ -60,6 +60,8 @@ CONF
             done
         done
     done
+    # Arch-neutral name for the dynamic loader.
+    ln -s $LDSO \$R/lib/ld.so
     echo \"runtime: \$(du -sh \$R | cut -f1), \$(ls \$R/lib | wc -l) libs\"
     ls \$R/lib
     echo \"glibc: \$(\$L/libc.so.6 2>&1 | head -1)\"

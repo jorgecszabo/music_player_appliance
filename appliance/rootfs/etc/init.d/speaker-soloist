@@ -1,0 +1,50 @@
+#!/sbin/openrc-run
+# Spotify Connect receiver: Spotify Soloist (official headless client), as user
+# "speaker", playing into the system-wide PipeWire.
+# Soloist is a glibc binary; it runs through a Debian glibc + PipeWire-client
+# runtime (squashfs on the boot media, mounted at /opt/soloist-runtime).
+# The binary lives on the boot media and is downloaded from Spotify by
+# /etc/panda/soloist-update.sh. Session and cache are in RAM: after a reboot,
+# picking the device in the Spotify app logs it in again.
+
+description="Spotify Connect receiver (Spotify Soloist, user speaker)"
+supervisor=supervise-daemon
+command_user="speaker:speaker"
+directory=/var/lib/speaker
+output_log=/var/log/speaker/soloist.log
+error_log=/var/log/speaker/soloist.log
+respawn_delay=10
+respawn_max=0
+
+RT=/opt/soloist-runtime
+
+depend() {
+	need net speaker-wireplumber localmount
+	after avahi-daemon
+}
+
+start_pre() {
+	. /etc/panda/board.conf
+	. /etc/panda/appliance.conf
+	local media=/media/"$BOOT_MEDIA"/soloist
+	[ -s /etc/panda/soloist.key ] || { eerror "no API key in /etc/panda/soloist.key"; return 1; }
+	if ! mountpoint -q "$RT"; then
+		mkdir -p "$RT"
+		mount -o loop,ro "$media"/soloist-runtime.squashfs "$RT" \
+			|| { eerror "can't mount $media/soloist-runtime.squashfs"; return 1; }
+	fi
+	[ -x "$media"/soloist ] || /etc/panda/soloist-update.sh \
+		|| { eerror "no Soloist binary and the download failed"; return 1; }
+	# The API key is a command-line argument: hide other users' processes.
+	mount -o remount,hidepid=invisible /proc
+	checkpath --directory --owner speaker:speaker --mode 0700 \
+		/var/lib/speaker/soloist-data /var/lib/speaker/soloist-cache
+
+	command="$RT/lib/ld.so"
+	command_args="--library-path $RT/lib $media/soloist
+		-n \"$SPEAKER_NAME\" -k \"$(cat /etc/panda/soloist.key)\"
+		-D /var/lib/speaker/soloist-data -C /var/lib/speaker/soloist-cache -z 100"
+	supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker
+		--env HOME=/var/lib/speaker --env PIPEWIRE_MODULE_DIR=$RT/pipewire-0.3
+		--env SPA_PLUGIN_DIR=$RT/spa-0.2 --env PIPEWIRE_CONFIG_DIR=$RT/share/pipewire"
+}

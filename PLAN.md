@@ -434,8 +434,18 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     Spotify for Developers dashboard (Premium); **builds expire after 90 days** (exit code 10),
     so the device must re-download periodically; **no redistribution**, so the device downloads
     from soloist-builds.spotifycdn.com itself and the binary is never in git or images.
-  - Next: Soloist playback test (needs the user's API key), then a service plus auto-update;
-    shairport-sync, firewall, measurements.
+  - **Soloist works (2026-11-04):** plays from the Spotify app, volume via its own PipeWire stream
+    volume, 44.1 kHz F32 stream resampled to 96 kHz, 0 errors, about 11% CPU (verbose), 63 C.
+    Service `speaker-soloist` (user speaker): the binary on the boot media
+    (`/media/<boot>/soloist/soloist`, downloaded by the device with `/etc/panda/soloist-update.sh`,
+    plus a weekly cron job `/etc/periodic/weekly/panda-soloist-update`); the runtime squashfs on the
+    boot media (installed by setup.sh from deploy.sh), mounted at /opt/soloist-runtime; API key in
+    `/etc/panda/soloist.key` (0640 root:speaker, lbu). The key is a CLI argument, so `/proc` is
+    remounted `hidepid=invisible` (verified hidden from `panda`). Session/cache in RAM.
+  - mDNS: spotifyd's built-in responder claimed the hostname, so avahi renamed itself
+    `panda-2.local`. Soloist's responder doesn't (avahi keeps `panda.local`). spotifyd removed.
+  - Next: shairport-sync, firewall (Soloist's zeroconf port is random, so allow the LAN, not ports),
+    startup volume, measurements, reboot test.
 
 ### Project layout
 

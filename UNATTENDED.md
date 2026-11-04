@@ -111,6 +111,14 @@ Fixes to try, keeping only what measurably helps:
   and chimes onto the card (chimes pre-synthesized on the host).
 - Build `build/sdimage/` and check its contents. The owner writes and tests the card later.
 
+### 7b. Radio improvements (requested 2026-11-04, after task 7)
+
+- Genre and country fields suggest valid values as you type, from radio-browser's own lists
+  (`/json/tags`, `/json/countries` with station counts; HTML `<datalist>`, retro styling).
+- Paging: Prev/Next buttons when a search has more than 40 stations (`offset`/`limit`).
+- Use the API as intended: server from `all.api.radio-browser.info`, `hidebroken`, click
+  counting, sensible caching of the tag/country lists.
+
 ### 8. If time is left
 
 - McPDM side quest: read-only investigation (dynamic debug if available, driver reading).

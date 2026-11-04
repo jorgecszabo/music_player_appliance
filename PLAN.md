@@ -494,6 +494,11 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     1.6 (starts at about one quantum, grows only after a seen delay spike, forgets after 2 min),
     and the BT 2.1 link is bursty. Fixed with `bluez5.decode-buffer.latency = 8192` (about
     186 ms) on `bluez_input.*` nodes; costs video lip-sync on the phone.
+  - Remaining occasional glitches are the radio link, not CPU: during AAC playback the
+    bluez node uses 9% of its cycle, 0 graph errors, CPU 81% idle; pinning the CPU at
+    1008 MHz (performance governor, to rule out OMAP4 DVFS stalls) didn't help. The 2.4 GHz
+    band in the apartment is crowded. **Plan: a BT 5.x USB dongle** (see above; needs
+    `btusb` + its firmware in the modloop, disable the onboard controller).
   - **Power-cut test passed:** after pulling the plug the pairing loaded from the overlay, same
     controller address, and panda-bt reconnected to the phone by itself.
 

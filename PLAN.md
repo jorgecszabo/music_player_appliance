@@ -565,7 +565,8 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
 - [x] **Image** (2026-11-04, UNATTENDED.md task 7): kernel r3, `build/sdimage/` (171 MB, 281
   packages, full appliance overlay, first-boot script runs setup.sh offline and reboots,
   `factory/` overlay, Soloist runtime, chimes). No Soloist binary (the device downloads it) and
-  no API key (entered on the web page). **Built but never written to a card or booted.**
+  no API key (entered on the web page). Rebuilt 2026-11-04 10:04 with kernel r4 and the Wi-Fi
+  work (up to the connect retry, 8ebe9c6). **Never written to a card or booted.**
 - [~] **Wi-Fi** (2026-11-04, see "Wi-Fi" above): kernel r4, `panda-wifi`, Network window, the
   WL1271 Wi-Fi-before-BT power order (verified). Connect retries for 3 min (nudges
   wpa_supplicant every 10 s). **Onboard Wi-Fi doesn't connect yet:** the router (`alf`, ch 6)
@@ -581,7 +582,6 @@ Next:
 1. **Test the image on a spare card** (`write-sdcard.sh`, keep the current card as it is):
    first boot runs setup and reboots; then the README test checklist (power cut, audio,
    AirPlay, Spotify, BT pairing + reconnect, radio, web page, watchdog, factory reset dry run).
-   Then rebuild with kernel r4 + the Wi-Fi work: the built image predates both.
 2. **Onboard Wi-Fi:** connect with the phone's Bluetooth off (tests coexistence), then close to
    the router (tests TX power); try a USB adapter. If coexistence: pause BT/page scan while
    connecting, or prefer USB. If TX: a calibrated NVS (`calibrator`) or give up on the WL1271.

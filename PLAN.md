@@ -619,7 +619,7 @@ Later:
 ### Project layout
 
 ```
-boards/<board>/            everything board-specific (pandaboard; beaglexm, untested)
+boards/<board>/            everything board-specific (pandaboard, beaglexm)
   board.conf               hardware description: arch, kernel flavor, DTB, console,
                            boot media, audio card/rate/mixer, BT, button, LEDs.
                            Also installed on the device as /etc/panda/board.conf

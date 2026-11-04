@@ -12,7 +12,8 @@ log() { echo "panda-setup: $*"; logger -t panda-setup "$*" 2>/dev/null || true; 
 
 PACKAGES="alsa-utils pipewire pipewire-alsa pipewire-tools wireplumber shairport-sync nftables
 	bluez pipewire-spa-bluez python3 py3-evdev py3-dbus-next
-	pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse mpv"
+	pipewire-filter-graph pipewire-filter-graph-builtin pipewire-pulse mpv
+	wpa_supplicant iw"
 # (Alpine ships libpipewire-module-filter-chain in pipewire-pulse; the pulse
 # server itself is not started.)
 
@@ -156,6 +157,11 @@ for d in /var/lib/bluetooth/*/cache; do
 	grep -qx -- "-${d#/}" /etc/apk/protected_paths.d/lbu.list 2>/dev/null || lbu exclude "$d"
 done
 
+# --- Wi-Fi: panda-wifi runs wpa_supplicant itself (see /etc/panda/panda-wifi.py) -----
+rc-update del wpa_supplicant boot >/dev/null 2>&1 || true
+rc-update del wpa_supplicant default >/dev/null 2>&1 || true
+[ -f /etc/panda/wifi.json ] && chown root:root /etc/panda/wifi.json && chmod 0600 /etc/panda/wifi.json
+
 # --- Factory overlay for factory resets (pushed by deploy.sh from the image) ---------
 new_fo=/tmp/panda-deploy/factory.apkovl.tar.gz
 fo=/media/"$BOOT_MEDIA"/factory/"$HOSTNAME".apkovl.tar.gz
@@ -206,7 +212,7 @@ if [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ]; then
 fi
 sysctl -q -p /etc/sysctl.d/90-panda.conf || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport speaker-radio speaker-arbiter bluetooth panda-bt panda-chime-boot panda-web crond; do
+	speaker-shairport speaker-radio speaker-arbiter bluetooth panda-bt panda-wifi panda-chime-boot panda-web crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

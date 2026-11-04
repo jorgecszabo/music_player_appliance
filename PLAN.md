@@ -17,7 +17,7 @@ Audio sources (all mixed by PipeWire on the board):
 - **Bluetooth A2DP sink**: phones pair and play to the Panda like a BT speaker
 
 Output: the onboard TWL6040 3.5 mm jack. Optional later: a USB DAC or HDMI audio.
-Network: wired ethernet only (onboard Wi-Fi disabled).
+Network: wired Ethernet, and Wi-Fi (onboard WL1271 or any common USB adapter; see "Wi-Fi" below).
 
 ## Findings that shape the plan (verified 2026-11-03)
 
@@ -88,7 +88,8 @@ ensure these options:
 | Networking extras | `IPV6`, multicast (mDNS for AirPlay/Spotify discovery) |
 | Diskless needs | `SQUASHFS`, `OVERLAY_FS`, `BLK_DEV_LOOP`, `TMPFS` |
 | Misc | `CPU_FREQ` + `ARM_TI_CPUFREQ`, `RTC_DRV_TWL`, `OMAP_WATCHDOG` |
-| Leave out | `WLCORE*`/`WL12XX` (Wi-Fi), GPU/SGX, camera, display (unless HDMI audio) |
+| Wi-Fi (r4) | `CFG80211`/`MAC80211`, `WLCORE_SDIO` + `WL12XX` (onboard), the USB Wi-Fi drivers a desktop distro ships (rtw88/rtw89, rtl8xxxu, mt76, ath9k_htc, carl9170, rt2800usb, brcmfmac, mwifiex, ...) |
+| Leave out | GPU/SGX, camera, display (unless HDMI audio) |
 
 - Package it as an APKBUILD modelled on `main/linux-lts`, so `mkinitfs` and the
   modloop work the Alpine way.
@@ -232,10 +233,26 @@ These make it behave like a commercial speaker. Built during Phases 4–6.
 passthrough, amplifier auto-power / HDMI-CEC, network updates, Home Assistant,
 UPnP/DLNA local files, multiroom (Snapcast), IR remote / rotary encoder,
 display, radio presets / alarm.
-USB Wi-Fi as an ethernet alternative: needs a kernel rebuild with `CFG80211`,
-`MAC80211` + the dongle's mainline driver, plus its firmware in the modloop. Pick
-MediaTek MT7612U (`mt76x2u`) or MT7921AU (`mt7921u`); Realtek 88x1CU (`rtw88`) is
-OK. Avoid out-of-tree drivers.
+### Wi-Fi (decided 2026-11-04)
+
+- Kernel r4: cfg80211/mac80211 as modules, the onboard WL1271 (`wlcore_sdio` +
+  `wl12xx`, DT `mmc5/wlcore@2`) and every mainline USB Wi-Fi driver a desktop
+  distro enables. mkimage puts each module's declared firmware into the modloop
+  (modinfo), and `regulatory.db` because cfg80211 is a module; the WL1271 NVS
+  file isn't declared, so it's in `MODLOOP_EXTRA_FIRMWARE`.
+- `panda-wifi` (root daemon): one adapter at a time ("auto" prefers USB),
+  wpa_supplicant + udhcpc (route metric 300+, so Ethernet's 200+ wins), stable
+  MAC for the onboard chip (board.conf `WIFI_MAC_FROM`), control socket for the
+  web page. Saved networks in `/etc/panda/wifi.json` (0600): WPA2 as the hashed
+  PSK; WPA3-only (SAE) keeps the password (SAE can't use a hash).
+- Factory Wi-Fi: `appliance/wifi.json` (gitignored) at build time goes into the
+  overlay with hashed PSKs, so it survives factory resets. A `wifi.json` dropped
+  onto the card's FAT partition is imported at boot and deleted.
+- Web page: "Network Connections" window (Ethernet status, Wi-Fi status with
+  signal bars, scan list, connect dialog, preferred networks, adapter/country).
+- Caveats: the WL1271 is 2.4 GHz b/g/n only, WPA2 only in practice, and shares
+  its antenna with Bluetooth (A2DP + busy Wi-Fi both suffer): a 5 GHz USB
+  adapter is the better choice. No WEP, no WPA-Enterprise.
 
 ## Users and privileges (decided 2026-11-03)
 

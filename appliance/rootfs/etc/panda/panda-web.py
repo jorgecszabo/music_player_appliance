@@ -21,6 +21,10 @@ firewall redirects port 80 to it. LAN only (firewall).
   GET  /api/radio/countries  all countries with stations (code, name, count)
   GET  /api/radio/favorites
   POST /api/radio            {"cmd": "play", "uuid"} | {"cmd": "stop"} | {"cmd": "fav", "uuid", "add": bool}
+  GET  /api/wifi/scan        scan now (a few seconds) and list the networks in range
+  POST /api/wifi             {"cmd": "connect", "ssid", "password"?, "hidden"?} | {"cmd": "forget", "ssid"}
+                             | {"cmd": "settings", "country"?, "adapter"?}   (panda-wifi control socket;
+                             passwords are passed through, never stored, logged or returned here)
 
 Privileged actions run /etc/panda/web-admin.sh through doas (it validates).
 Protections: Host header must name this device (DNS rebinding), and POSTs need
@@ -45,13 +49,14 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
 ADMIN = ["doas", "-n", "/etc/panda/web-admin.sh"]
 PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
 BT_SOCK = "/run/panda/bt.sock"
+WIFI_SOCK = "/run/panda/wifi.sock"
 SERVICES = ["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-wireplumber",
             "speaker-soloist", "speaker-shairport", "speaker-radio", "speaker-arbiter", "bluetooth",
-            "panda-bt", "avahi-daemon",
+            "panda-bt", "panda-wifi", "avahi-daemon",
             "chronyd", "sshd", "crond", "panda-web"]
-RESTARTABLE = {"speaker-soloist", "speaker-shairport", "speaker-radio", "panda-bt", "bluetooth",
+RESTARTABLE = {"speaker-soloist", "speaker-shairport", "speaker-radio", "panda-bt", "panda-wifi", "bluetooth",
                "avahi-daemon", "chronyd"}
-LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "radio", "panda-bt", "panda-web",
+LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "radio", "panda-bt", "panda-wifi", "panda-web",
         "panda-web-admin", "messages"]
 
 
@@ -82,16 +87,16 @@ def shell_conf(path):
             if q:
                 v = q.group(2)
             else:
-                v = re.split(r'\s+#', v, 1)[0].strip()   # unquoted; drop "# comment"
+                v = re.split(r'\s+#', v, maxsplit=1)[0].strip()   # unquoted; drop "# comment"
             out[m.group(1)] = v
     return out
 
 
-def bt_call(req, timeout=5):
+def bt_call(req, timeout=5, sock=BT_SOCK, name="panda-bt"):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
-            s.connect(BT_SOCK)
+            s.connect(sock)
             s.sendall(json.dumps(req).encode() + b"\n")
             buf = b""
             while not buf.endswith(b"\n"):
@@ -101,7 +106,11 @@ def bt_call(req, timeout=5):
                 buf += chunk
         return json.loads(buf)
     except (OSError, ValueError) as e:
-        return {"error": f"panda-bt unavailable ({e.__class__.__name__})"}
+        return {"error": f"{name} unavailable ({e.__class__.__name__})"}
+
+
+def wifi_call(req, timeout=5):
+    return bt_call(req, timeout, WIFI_SOCK, "panda-wifi")
 
 
 # --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
@@ -328,6 +337,7 @@ class Collector:
             "net": self.slow.get("net"),
             "audio": self.audio(),
             "bt": bt_call({"cmd": "status"}),
+            "wifi": wifi_call({"cmd": "status"}),
             "services": self.slow.get("services"),
             "sync": self.slow.get("sync"),
             "lbu": self.slow.get("lbu"),
@@ -668,6 +678,9 @@ class Handler(BaseHTTPRequestHandler):
                                               and re.fullmatch(r"[A-Za-z]{2}", str(c.get("iso_3166_1", "")))]})
             except Exception as e:
                 self.send_json({"error": f"radio-browser.info: {e.__class__.__name__}"}, 502)
+        elif url.path == "/api/wifi/scan":
+            res = wifi_call({"cmd": "scan"}, timeout=20)
+            self.send_json(res, 502 if "error" in res else 200)
         elif url.path == "/api/radio/favorites":
             self.send_json({"stations": load_favorites()})
         elif url.path == "/api/logs":
@@ -715,7 +728,8 @@ class Handler(BaseHTTPRequestHandler):
         handler = {"/api/volume": self.volume, "/api/bt": self.bt,
                    "/api/service": self.service, "/api/system": self.system,
                    "/api/name": self.name, "/api/spotify-key": self.spotify_key,
-                   "/api/audio": self.audio_settings, "/api/radio": self.radio}.get(path)
+                   "/api/audio": self.audio_settings, "/api/radio": self.radio,
+                   "/api/wifi": self.wifi}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -748,6 +762,26 @@ class Handler(BaseHTTPRequestHandler):
         if cmd == "forget-all":
             return bt_call({"cmd": "forget-all"})
         raise ValueError("unknown command")
+
+    def wifi(self, req):
+        cmd = req.get("cmd")
+        if cmd == "connect":
+            out = {"cmd": "connect", "ssid": str(req.get("ssid", ""))[:64],
+                   "hidden": bool(req.get("hidden"))}
+            if req.get("password"):
+                out["password"] = str(req["password"])[:64]
+            res = wifi_call(out, timeout=15)
+        elif cmd == "forget":
+            res = wifi_call({"cmd": "forget", "ssid": str(req.get("ssid", ""))[:64]})
+        elif cmd == "settings":
+            res = wifi_call({"cmd": "settings", **{k: str(req[k])[:32] for k in ("country", "adapter")
+                                                   if k in req}})
+        else:
+            raise ValueError("unknown command")
+        if "error" in res:
+            raise ValueError(res["error"])
+        COLLECTOR.wake_fast.set()
+        return res
 
     def service(self, req):
         name = req.get("name")

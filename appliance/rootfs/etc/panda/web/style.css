@@ -484,3 +484,42 @@ tr.playing .st-dim { color: #ccc; }
   .ticker-track { padding-left: 0; }
   .lcd-title.scrolling { padding-left: 0; }
 }
+
+/* --- Network Connections ------------------------------------------------------- */
+.conn-row { display: flex; gap: 10px; align-items: center; }
+/* A tiny "network cable" monitor icon, drawn in CSS. */
+.conn-icon.lan {
+  flex: none; width: 26px; height: 20px; position: relative;
+  background: #000080; box-shadow: var(--raised); border: 2px solid var(--face);
+}
+.conn-icon.lan::after {
+  content: ""; position: absolute; left: 8px; bottom: -8px; width: 6px; height: 4px;
+  background: var(--shadow);
+}
+.conn-icon.lan.off { background: var(--shadow); }
+/* Signal strength: five rising bars, lit from the left. */
+.bars { flex: none; display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; padding: 2px 4px;
+        background: var(--field); box-shadow: var(--sunken); }
+.bars i { display: block; width: 4px; background: var(--light); border: 1px solid var(--shadow); }
+.bars i:nth-child(1) { height: 4px; } .bars i:nth-child(2) { height: 7px; }
+.bars i:nth-child(3) { height: 10px; } .bars i:nth-child(4) { height: 13px; }
+.bars i:nth-child(5) { height: 16px; }
+.bars i.lit { background: var(--ok); border-color: #004000; }
+.bars.small { height: 14px; padding: 1px 2px; gap: 1px; box-shadow: none; background: none; }
+.bars.small i { width: 3px; }
+.bars.small i:nth-child(1) { height: 3px; } .bars.small i:nth-child(2) { height: 5px; }
+.bars.small i:nth-child(3) { height: 7px; } .bars.small i:nth-child(4) { height: 9px; }
+.bars.small i:nth-child(5) { height: 11px; }
+.wifi-tools { margin-top: 10px; }
+.listbox { margin-top: 4px; background: var(--field); max-height: 190px; overflow-y: auto; font-size: 12px; }
+.listbox .item { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 8px; align-items: center;
+                 padding: 3px 6px; cursor: default; border: 1px dotted transparent; }
+.listbox .item:focus { outline: none; border-color: #000; }
+.listbox .item.sel { background: var(--title-a); color: #fff; }
+.listbox .item.sel .bars.small i:not(.lit) { background: var(--shadow); }
+.listbox .item .sec, .listbox .item .band { font-size: 11px; white-space: nowrap; }
+.listbox .empty { padding: 10px; color: var(--shadow); }
+details.advanced { margin-top: 10px; }
+details.advanced summary { cursor: pointer; }
+.props-form { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 4px; }
+.form-line { display: block; margin-top: 8px; font-size: 12px; }

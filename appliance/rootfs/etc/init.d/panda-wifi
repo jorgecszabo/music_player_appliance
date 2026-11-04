@@ -1,0 +1,18 @@
+#!/sbin/openrc-run
+# Wi-Fi client: wpa_supplicant + udhcpc on the onboard or a USB adapter, saved
+# networks, the web page's control socket. See /etc/panda/panda-wifi.py.
+# Runs as root (wpa_supplicant, addresses, lbu commit).
+
+description="Wi-Fi client (onboard or USB adapter)"
+supervisor=supervise-daemon
+command=/usr/bin/python3
+command_args="/etc/panda/panda-wifi.py"
+output_log=/var/log/panda-wifi.log
+error_log=/var/log/panda-wifi.log
+respawn_delay=3
+respawn_max=0
+
+depend() {
+	need localmount
+	after modules hwdrivers udev-settle networking panda-firewall
+}

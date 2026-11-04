@@ -13,7 +13,7 @@
 _flavor=pandaboard
 pkgname=linux-$_flavor
 pkgver=6.18.60
-pkgrel=3
+pkgrel=4
 pkgdesc="Linux LTS kernel for the PandaBoard (OMAP4430)"
 url="https://www.kernel.org"
 arch="armv7"
@@ -38,5 +38,5 @@ package() {
 }
 
 sha512sums="
-93dcfad680eafa717a0453fdb787db9388f60872ef5775a146c1934e71609628c3d0eb9dcedd564c7b545eb870bd6016249b6b12419e04069ca192604dd4462c  pandaboard.config
+be0d7f0d7cc54865fcc10c75bf2bde3733050c5c2440e0d11150e08f6453ece8134def0e8bc910a75ae23cf8626e9fc2a3be6bb33670c42fe608ad4353025218  pandaboard.config
 "

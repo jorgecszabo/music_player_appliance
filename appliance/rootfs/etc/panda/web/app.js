@@ -96,6 +96,7 @@ function render(s) {
   renderNowPlaying(s);
   renderVolume(s);
   renderBluetooth(s);
+  renderNetwork(s);
   renderSystem(s);
   renderServices(s);
   renderSave(s);
@@ -456,6 +457,235 @@ function renderBluetooth(s) {
   }
 }
 
+// --- Network Connections ------------------------------------------------------------
+let wifiNets = [];        // last scan
+let wifiSel = null;       // selected SSID in the list
+let wifiScanning = false;
+let wifiScannedOnce = false;
+
+// dBm -> 0..5 bars
+function bars(dbm) {
+  if (dbm == null) return 0;
+  return dbm >= -55 ? 5 : dbm >= -63 ? 4 : dbm >= -70 ? 3 : dbm >= -78 ? 2 : dbm >= -86 ? 1 : 0;
+}
+function barsEl(n) {
+  const b = el("span", { class: "bars small", "aria-hidden": "true" });
+  for (let i = 0; i < 5; i++) b.append(el("i", { class: i < n ? "lit" : "" }));
+  return b;
+}
+const SEC = { open: "Unsecured", owe: "Enhanced Open", wpa: "WPA", wpa2: "WPA2", wpa3: "WPA3",
+              "wpa2/wpa3": "WPA2/WPA3", wep: "WEP (not supported)", enterprise: "802.1X (not supported)" };
+function band(freq) { return freq > 5900 ? "6 GHz" : freq > 4900 ? "5 GHz" : "2.4 GHz"; }
+const WIFI_STATE = { disconnected: "Not connected", inactive: "Not connected (no saved network in range)",
+  scanning: "Looking for saved networks...", authenticating: "Authenticating...", associating: "Connecting...",
+  associated: "Connecting...", "4way_handshake": "Checking the network key...",
+  group_handshake: "Checking the network key...", interface_disabled: "Adapter disabled",
+  starting: "Starting the adapter...", off: "Wi-Fi is off" };
+
+function renderNetwork(s) {
+  // Ethernet: any interface that isn't a Wi-Fi adapter.
+  const net = s.net || {};
+  const w = s.wifi || {};
+  const wifiIfs = new Set((w.adapters || []).map((a) => a.name));
+  const lan = Object.entries(net.links || {}).filter(([n]) => !wifiIfs.has(n) && !n.startsWith("wl"));
+  const lanUp = lan.find(([, l]) => l.state === "up");
+  if (lanUp) {
+    const [n, l] = lanUp;
+    const a = (net.addrs || []).filter((x) => x.if === n && x.family === "inet").map((x) => x.addr.split("/")[0]);
+    setText("lan-text", `Connected${l.speed && +l.speed > 0 ? `, ${l.speed} Mb/s` : ""} (${n}) — ${a.join(", ") || "getting an address..."}`);
+  } else {
+    setText("lan-text", lan.length ? "Network cable unplugged" : "No Ethernet adapter");
+  }
+  document.querySelector(".conn-icon.lan").classList.toggle("off", !lanUp);
+
+  // Wi-Fi status line
+  const c = w.connection;
+  const lit = c ? bars(c.signal) : 0;
+  $("wifi-bars").querySelectorAll("i").forEach((b, i) => b.classList.toggle("lit", i < lit));
+  let text;
+  if (w.error && !w.adapters) text = `Wi-Fi is not available: ${w.error}`;
+  else if (!(w.adapters || []).length) text = "No wireless adapter found. Plug in a USB Wi-Fi adapter.";
+  else if (w.pending) text = `Connecting to ${w.pending}...`;
+  else if (c) {
+    const a4 = (net.addrs || []).find((x) => x.if === w.iface && x.family === "inet");
+    const ip = c.ip || (a4 ? a4.addr.split("/")[0] : "");
+    text = `Connected to ${c.ssid} (${band(c.freq)}, ${c.signal ?? "?"} dBm${c.speed ? `, ${c.speed} Mb/s` : ""}) — ${ip || "getting an address..."}`;
+  } else if (!(w.saved || []).length && ["disconnected", "inactive", "scanning"].includes(w.state)) {
+    text = "Not connected. Pick a network below and click Connect.";
+  } else text = WIFI_STATE[w.state] || w.state || "-";
+  if (w.error && w.adapters) text += ` [${w.error}]`;
+  setText("wifi-text", text);
+  const act = (w.adapters || []).find((a) => a.active);
+  const bandText = act && act.bands && act.bands.length && !act.bands.every((b) => act.description.includes(b))
+    ? ` — ${act.bands.join(" + ")}` : "";
+  setText("wifi-adapter", act ? `Using: ${act.description}${bandText}` : "");
+  $("wifi-refresh").disabled = !w.iface || wifiScanning;
+  $("wifi-other").disabled = !w.iface;
+  if (w.iface && !wifiScannedOnce && location.hash === "#network") wifiScan();
+
+  // Preferred networks
+  const tbody = $("wifi-saved").tBodies[0];
+  const key = JSON.stringify([w.saved, c && c.ssid]);
+  if (tbody.dataset.key !== key) {
+    tbody.dataset.key = key;
+    tbody.replaceChildren();
+    if (!(w.saved || []).length) tbody.append(el("tr", {}, el("td", { colspan: 3, class: "center" }, "No saved networks.")));
+    for (const n of w.saved || []) {
+      const forget = el("button", { class: "btn", type: "button" }, "Forget");
+      forget.addEventListener("click", async () => {
+        const here = c && c.ssid === n.ssid;
+        if (!await dialog(`Forget "${n.ssid}"? The speaker won't connect to it any more.` +
+            (here ? " It's connected now: if you're using this page over that network, you'll lose the page." : ""),
+            { title: "Wireless Network Connection" })) return;
+        post("/api/wifi", { cmd: "forget", ssid: n.ssid }).catch(oops);
+      });
+      tbody.append(el("tr", {},
+        el("td", {}, el("b", {}, n.ssid), c && c.ssid === n.ssid ? el("span", { class: "st-ok" }, " (connected)") : ""),
+        el("td", {}, SEC[n.security] || n.security),
+        el("td", {}, forget)));
+    }
+  }
+
+  // Advanced: adapter choice, country, adapter list (don't clobber while editing)
+  const sel = $("wifi-adapter-sel");
+  const opts = [["auto", "Automatic (prefer USB)"], ["onboard", "Onboard only"], ["usb", "USB only"], ["off", "Off"]]
+    .concat((w.adapters || []).map((a) => [a.name, `${a.name}: ${a.description}`]));
+  const okey = JSON.stringify([opts, w.adapter_setting]);
+  if (sel.dataset.key !== okey && document.activeElement !== sel) {
+    sel.dataset.key = okey;
+    sel.replaceChildren(...opts.map(([v, t]) => el("option", { value: v }, t)));
+    sel.value = w.adapter_setting || "auto";
+  }
+  if (document.activeElement !== $("wifi-country") && !$("wifi-country").dataset.edited) {
+    $("wifi-country").value = w.country || "";
+  }
+  const props = $("wifi-adapters");
+  const pkey = JSON.stringify(w.adapters);
+  if (props.dataset.key !== pkey) {
+    props.dataset.key = pkey;
+    props.replaceChildren(...(w.adapters || []).map((a) => el("tr", {},
+      el("th", {}, `${a.name}${a.active ? " (in use)" : ""}`),
+      el("td", {}, `${a.description}; driver ${a.driver || "?"}; ${(a.bands || []).join(" + ") || "?"}; MAC ${a.mac}`))));
+  }
+}
+
+function drawWifiList() {
+  const box = $("wifi-list");
+  box.replaceChildren();
+  if (!wifiNets.length) {
+    box.append(el("div", { class: "empty" }, wifiScanning ? "Searching..." : "No networks found."));
+  }
+  for (const n of wifiNets) {
+    const item = el("div", { class: `item${n.ssid === wifiSel ? " sel" : ""}`, role: "option", tabindex: "0",
+                             "aria-selected": n.ssid === wifiSel ? "true" : "false" },
+      barsEl(bars(n.signal)),
+      el("span", {}, el("b", {}, n.ssid), n.saved ? " (saved)" : ""),
+      el("span", { class: "sec" }, n.security === "open" ? "Unsecured" : `\u{1F512} ${SEC[n.security] || n.security}`),
+      el("span", { class: "band" }, (n.bands || [band(n.freq)]).join("/")));
+    item.title = `${n.signal} dBm, ${n.freq} MHz, ${n.bssid}`;
+    const pick = () => { wifiSel = n.ssid; drawWifiList(); };
+    item.addEventListener("click", pick);
+    item.addEventListener("dblclick", () => { pick(); wifiConnectSelected(); });
+    item.addEventListener("keydown", (e) => { if (e.key === "Enter") { pick(); wifiConnectSelected(); } });
+    box.append(item);
+  }
+  $("wifi-connect").disabled = !wifiNets.some((n) => n.ssid === wifiSel);
+}
+
+async function wifiScan() {
+  if (wifiScanning) return;
+  wifiScanning = wifiScannedOnce = true;
+  $("wifi-refresh").disabled = true;
+  setText("wifi-scan-text", "searching...");
+  drawWifiList();
+  try {
+    const r = await fetch("/api/wifi/scan");
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    wifiNets = d.networks || [];
+    setText("wifi-scan-text", `${wifiNets.length} found at ${new Date().toLocaleTimeString()}. Double-click one to connect.`);
+  } catch (err) {
+    setText("wifi-scan-text", `couldn't scan (${err.message}).`);
+  }
+  wifiScanning = false;
+  $("wifi-refresh").disabled = false;
+  drawWifiList();
+}
+
+// The "Connect to Wireless Network" dialog. Resolves {ssid, password, hidden} or null.
+function wifiDialog({ ssid = "", needKey = true, other = false, saved = false } = {}) {
+  return new Promise((resolve) => {
+    const f = $("wifi-form");
+    $("wifi-ssid").value = ssid;
+    $("wifi-ssid").readOnly = !other;
+    $("wifi-pw").value = "";
+    $("wifi-pw").type = "password";
+    $("wifi-show").checked = false;
+    $("wifi-hidden").checked = other;
+    $("wifi-hidden-line").hidden = !other;
+    $("wifi-pw-line").hidden = !needKey;
+    $("wifi-show").parentElement.hidden = !needKey;
+    const intro = other
+      ? "Type the name and key of the network. Leave the key empty for an unsecured network."
+      : !needKey ? `"${ssid}" is unsecured: anyone nearby can see what goes over it. Connect anyway?`
+      : saved ? `"${ssid}" is saved. Type a new network key, or leave it empty to use the saved one.`
+      : `The network "${ssid}" requires a network key (WPA password).`;
+    setText("wifi-modal-text", intro);
+    $("wifi-modal").hidden = false;
+    (other ? $("wifi-ssid") : needKey ? $("wifi-pw") : $("wifi-ok")).focus();
+    const done = (v) => {
+      $("wifi-modal").hidden = true;
+      f.onsubmit = $("wifi-cancel").onclick = $("wifi-show").onchange = null;
+      document.onkeydown = null;
+      $("wifi-pw").value = "";   // don't keep the key in the page
+      resolve(v);
+    };
+    $("wifi-show").onchange = () => { $("wifi-pw").type = $("wifi-show").checked ? "text" : "password"; };
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      const pw = $("wifi-pw").value;
+      const name = $("wifi-ssid").value;
+      if (!name) return;
+      if (needKey && pw && (pw.length < 8 || pw.length > 64)) {
+        setText("wifi-modal-text", "The network key must be 8 to 63 characters.");
+        return;
+      }
+      if (needKey && !pw && !saved && !other) {
+        setText("wifi-modal-text", "Please type the network key.");
+        return;
+      }
+      done({ ssid: name, password: needKey ? pw : "", hidden: $("wifi-hidden").checked });
+    };
+    $("wifi-cancel").onclick = () => done(null);
+    document.onkeydown = (e) => { if (e.key === "Escape") done(null); };
+  });
+}
+
+async function wifiConnect(opts) {
+  const w = (last && last.wifi) || {};
+  const res = await wifiDialog(opts);
+  if (!res) return;
+  const viaWifi = w.connection && w.connection.ip && location.hostname === w.connection.ip;
+  if (viaWifi && w.connection.ssid !== res.ssid &&
+      !await dialog(`You're using this page over the Wi-Fi network "${w.connection.ssid}". Switching networks will disconnect this page; find the speaker again on "${res.ssid}" (http://${last.host.hostname}.local/).`,
+        { title: "Wireless Network Connection" })) return;
+  try {
+    await post("/api/wifi", { cmd: "connect", ...res });
+    wifiSel = null;
+    drawWifiList();
+    info(`Connecting to "${res.ssid}"... The status above shows when it's done. It's saved once it connects; if it fails, the speaker goes back to its saved networks.`);
+  } catch (err) { oops(err); }
+}
+
+function wifiConnectSelected() {
+  const n = wifiNets.find((x) => x.ssid === wifiSel);
+  if (!n) return;
+  if (n.security === "wep" || n.security === "enterprise") {
+    return oops(new Error(`"${n.ssid}" uses ${SEC[n.security]}. Only unsecured, WPA2 and WPA3 personal networks are supported.`));
+  }
+  wifiConnect({ ssid: n.ssid, needKey: !["open", "owe"].includes(n.security), saved: n.saved });
+}
+
 function renderSystem(s) {
   setText("sys-board", `${s.host.board || "?"} (${s.cpu.cores}x CPU) — hostname ${s.host.hostname}`);
   setText("sys-os", `Alpine Linux ${s.host.alpine}, kernel ${s.host.kernel}`);
@@ -494,7 +724,7 @@ function renderSystem(s) {
 
 function renderServices(s) {
   const tbody = $("svc-table").tBodies[0];
-  const restartable = new Set(["speaker-soloist", "speaker-shairport", "panda-bt", "bluetooth", "avahi-daemon", "chronyd"]);
+  const restartable = new Set(["speaker-soloist", "speaker-shairport", "panda-bt", "panda-wifi", "bluetooth", "avahi-daemon", "chronyd"]);
   tbody.replaceChildren();
   for (const [name, state] of Object.entries(s.services || {})) {
     if (name === "error") continue;
@@ -653,6 +883,24 @@ function wireActions() {
       if (r.ok) info("Resetting... The speaker restarts in a moment with factory settings.");
       else oops(new Error(r.result || "failed"));
     } catch (err) { oops(err); }
+  });
+
+  $("wifi-refresh").addEventListener("click", wifiScan);
+  $("wifi-connect").addEventListener("click", wifiConnectSelected);
+  $("wifi-other").addEventListener("click", () => wifiConnect({ other: true }));
+  $("wifi-country").addEventListener("input", () => { $("wifi-country").dataset.edited = "1"; });
+  $("wifi-settings").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const country = $("wifi-country").value.trim().toUpperCase();
+    if (country && !/^[A-Z]{2}$/.test(country)) return oops(new Error("The country is a two-letter code, like US or DE."));
+    try {
+      await post("/api/wifi", { cmd: "settings", country, adapter: $("wifi-adapter-sel").value });
+      delete $("wifi-country").dataset.edited;
+      info("Wi-Fi settings applied and saved to the card.");
+    } catch (err) { oops(err); }
+  });
+  window.addEventListener("hashchange", () => {
+    if (location.hash === "#network" && last && last.wifi && last.wifi.iface) wifiScan();
   });
 
   $("reboot-btn").addEventListener("click", async () => {

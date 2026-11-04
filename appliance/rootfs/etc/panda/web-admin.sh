@@ -40,7 +40,7 @@ restart_audio() {
 case "${1:-}" in
 restart)
 	case "${2:-}" in
-		speaker-soloist|speaker-shairport|speaker-radio|panda-bt|avahi-daemon|chronyd) bg rc-service "$2" restart ;;
+		speaker-soloist|speaker-shairport|speaker-radio|panda-bt|panda-wifi|avahi-daemon|chronyd) bg rc-service "$2" restart ;;
 		bluetooth) bg sh -c 'rc-service bluetooth restart; rc-service panda-bt start' ;;
 		*) die "not a restartable service: ${2:-}" ;;
 	esac ;;
@@ -60,7 +60,7 @@ chrony)
 logs)
 	case "${2:-}" in
 		pipewire|wireplumber|soloist|shairport|arbiter|radio) f=/var/log/speaker/$2.log ;;
-		panda-bt|panda-web|panda-web-admin) f=/var/log/$2.log ;;
+		panda-bt|panda-wifi|panda-web|panda-web-admin) f=/var/log/$2.log ;;
 		messages) f=/var/log/messages ;;
 		*) die "unknown log: ${2:-}" ;;
 	esac

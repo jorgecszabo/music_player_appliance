@@ -30,6 +30,18 @@ if [ ! -s "$APPLIANCE_DIR/authorized_keys" ]; then
 fi
 echo "authorized_keys: $(grep -c . "$APPLIANCE_DIR/authorized_keys" 2>/dev/null || echo 0) key(s)"
 
+# Optional factory Wi-Fi: appliance/wifi.json (not in git), e.g.
+#   {"country": "DE", "networks": [{"ssid": "Home", "password": "..."}]}
+# goes into the overlay (live and factory copy) as /etc/panda/wifi.json with
+# the passwords hashed (WPA2 PSK; a "wpa3": true network keeps its password).
+WIFI_ROOT="$PROJECT_DIR/build/wifi-rootfs"
+rm -rf "$WIFI_ROOT"
+if [ -f "$APPLIANCE_DIR/wifi.json" ]; then
+    mkdir -p "$WIFI_ROOT/etc/panda"
+    python3 -I "$APPLIANCE_DIR/rootfs/etc/panda/panda-wifi.py" --convert \
+        "$APPLIANCE_DIR/wifi.json" "$WIFI_ROOT/etc/panda/wifi.json"
+fi
+
 # Files mkimage loads from ~/.mkimage (relative to /work inside the container).
 MKIMAGE_FILES="boards/$BOARD/mkimg.$BOARD.sh boards/$BOARD/board.conf
     appliance/appliance.conf appliance/packages.list appliance/genapkovl.sh"
@@ -45,6 +57,10 @@ ALPINE_ROOT=keepid "$PROJECT_DIR/scripts/alpine.sh" sh -euc "
         rm -rf ~/.mkimage && mkdir -p ~/.mkimage
         cd /work && cp $(echo $MKIMAGE_FILES) ~/.mkimage/
         tar -C /work/appliance/rootfs --owner=0 --group=0 -cf ~/.mkimage/rootfs.tar etc
+        if [ -f /work/build/wifi-rootfs/etc/panda/wifi.json ]; then
+            tar -C /work/build/wifi-rootfs --owner=0 --group=0 --mode=0600 \
+                -rf ~/.mkimage/rootfs.tar etc/panda/wifi.json
+        fi
         . ~/.abuild/abuild.conf; export PACKAGER_PRIVKEY
         cd /work/build/src/aports/scripts
         sh mkimage.sh --tag $TAG --arch $ALPINE_ARCH --profile $BOARD --hostkeys \

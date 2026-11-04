@@ -4,3 +4,4 @@ packages/
 appliance/authorized_keys
 **/aports/*/src/
 **/aports/*/pkg/
+appliance/wifi.json

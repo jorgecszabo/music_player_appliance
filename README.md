@@ -21,6 +21,15 @@ sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage   # erases the car
 Then boot with the serial console (115200 8N1), set a root password for the
 console (`passwd`, `lbu commit`), and log in with `ssh panda@panda.local`.
 
+Wi-Fi out of the box: put `appliance/wifi.json` (not in git) before building,
+or drop one onto the card's boot partition (imported at boot, then deleted):
+
+```json
+{"country": "DE", "networks": [{"ssid": "Home", "password": "secret123"}]}
+```
+
+Otherwise boot with Ethernet and pick a network on the web page (Network).
+
 Other boards: `BOARD=<name>` selects `boards/<name>/`. That directory needs a
 `board.conf`, an `mkimg.<name>.sh` profile and a card writer.
 

@@ -26,6 +26,7 @@
       <li><a href="#radio">Radio</a> <span class="new">NEW!</span></li>
       <li><a href="#volume">Volume</a></li>
       <li><a href="#bluetooth">Bluetooth</a></li>
+      <li><a href="#network">Network</a> <span class="new">NEW!</span></li>
       <li><a href="#system">System</a></li>
       <li><a href="#services">Services</a></li>
       <li><a href="#logs">Logs</a></li>
@@ -166,6 +167,51 @@
   </div>
 </section>
 
+<section class="window" id="network">
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128225;</span><span class="title-text">Network Connections</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="window-body">
+    <fieldset class="group">
+      <legend>Local Area Connection</legend>
+      <div class="conn-row"><span class="conn-icon lan" aria-hidden="true"></span><div id="lan-text">-</div></div>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Wireless Network Connection</legend>
+      <div class="conn-row">
+        <span class="bars" id="wifi-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <div><div id="wifi-text">-</div><div class="small" id="wifi-adapter">-</div></div>
+      </div>
+      <div class="wifi-tools">
+        <span class="small"><b>Available wireless networks:</b> <span id="wifi-scan-text">click Refresh to look for networks.</span></span>
+      </div>
+      <div class="listbox sunken" id="wifi-list" role="listbox" aria-label="Available wireless networks"></div>
+      <div class="button-row left">
+        <button class="btn" id="wifi-refresh" type="button">Refresh network list</button>
+        <button class="btn" id="wifi-connect" type="button" disabled>Connect...</button>
+        <button class="btn" id="wifi-other" type="button">Other network...</button>
+      </div>
+      <p class="small"><b>Preferred networks</b> (tried in this order, saved to the card):</p>
+      <table class="grid" id="wifi-saved">
+        <thead><tr><th>Network</th><th>Security</th><th></th></tr></thead>
+        <tbody><tr><td colspan="3" class="center">No saved networks.</td></tr></tbody>
+      </table>
+      <details class="advanced">
+        <summary>Advanced...</summary>
+        <form id="wifi-settings" class="props-form">
+          <label>Adapter <select id="wifi-adapter-sel" aria-label="Wi-Fi adapter"></select></label>
+          <label>Country <input type="text" class="field tiny" id="wifi-country" maxlength="2"
+                 autocomplete="off" spellcheck="false" placeholder="--" aria-label="Wi-Fi country code"></label>
+          <button class="btn" type="submit">Apply</button>
+        </form>
+        <p class="small">Country: the two-letter code (US, DE, AR...) sets the legal channels and power.
+          Empty = worldwide defaults (some 5 GHz channels may not be found).
+          "Automatic" prefers a USB adapter: the onboard one is 2.4 GHz only and shares
+          its antenna with Bluetooth.</p>
+        <table class="props" id="wifi-adapters"></table>
+      </details>
+    </fieldset>
+  </div>
+</section>
+
 <section class="window" id="system">
   <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128187;</span><span class="title-text">System Properties</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
   <div class="window-body">
@@ -203,7 +249,7 @@
     <div class="button-row left">
       <label for="log-name">Log:</label>
       <select id="log-name">
-        <option>soloist</option><option>shairport</option><option>radio</option><option>arbiter</option><option>panda-bt</option>
+        <option>soloist</option><option>shairport</option><option>radio</option><option>arbiter</option><option>panda-bt</option><option>panda-wifi</option>
         <option>pipewire</option><option>wireplumber</option><option>panda-web</option>
         <option>panda-web-admin</option><option>messages</option>
       </select>
@@ -243,8 +289,8 @@
         <button class="btn" id="reboot-btn" type="button">Reboot...</button>
         <button class="btn" id="reset-btn" type="button">Factory reset...</button>
       </div>
-      <p class="small">Factory reset forgets everything saved: Bluetooth phones, the Spotify key,
-        tone settings, radio favorites, the name. Also: hold S2 while powering on (LEDs blink fast;
+      <p class="small">Factory reset forgets everything saved: Bluetooth phones, Wi-Fi networks (except any built
+        into the card), the Spotify key, tone settings, radio favorites, the name. Also: hold S2 while powering on (LEDs blink fast;
         keep holding for 5 seconds).</p>
     </fieldset>
   </div>
@@ -277,6 +323,28 @@
         <button class="btn" id="modal-cancel" type="button">Cancel</button>
       </div>
     </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="wifi-modal" hidden>
+  <div class="window dialog" role="dialog" aria-modal="true" aria-labelledby="wifi-modal-title">
+    <div class="title-bar"><span class="title-text" id="wifi-modal-title">Connect to Wireless Network</span><span class="title-buttons" aria-hidden="true"><i>&times;</i></span></div>
+    <form class="window-body" id="wifi-form" autocomplete="off">
+      <div class="dialog-body"><span class="dialog-icon info" aria-hidden="true">&#128225;</span>
+        <div>
+          <p id="wifi-modal-text">The network requires a network key.</p>
+          <label class="form-line">Network name (SSID):<br>
+            <input type="text" class="field" id="wifi-ssid" maxlength="32" spellcheck="false"></label>
+          <label class="form-line" id="wifi-pw-line">Network key:<br>
+            <input type="password" class="field" id="wifi-pw" maxlength="64" spellcheck="false"></label>
+          <label class="form-line"><input type="checkbox" id="wifi-show"> Show characters</label>
+          <label class="form-line" id="wifi-hidden-line"><input type="checkbox" id="wifi-hidden"> This network doesn't broadcast its name</label>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="btn" type="submit" id="wifi-ok">Connect</button>
+        <button class="btn" type="button" id="wifi-cancel">Cancel</button>
+      </div>
+    </form>
   </div>
 </div>
 </body>

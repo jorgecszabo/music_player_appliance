@@ -20,4 +20,6 @@ bluez bluez-deprecated
 # Appliance services (python3: panda-bt, panda-web, panda-arbiter)
 python3 py3-evdev py3-dbus-next
 nftables
+# Wi-Fi (panda-wifi)
+wpa_supplicant iw
 mpv

@@ -1,3 +1,0 @@
-#!/bin/sh
-# Soloist builds expire after 90 days; fetch the current one weekly.
-exec /etc/panda/soloist-update.sh --restart

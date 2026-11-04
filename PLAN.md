@@ -491,7 +491,7 @@ sudo usermod -aG dialout $USER   # serial port access; log out/in afterwards
     volume, 44.1 kHz F32 stream resampled to 96 kHz, 0 errors, about 11% CPU (verbose), 63 C.
     Service `speaker-soloist` (user speaker): the binary on the boot media
     (`/media/<boot>/soloist/soloist`, downloaded by the device with `/etc/panda/soloist-update.sh`,
-    plus a weekly cron job `/etc/periodic/weekly/panda-soloist-update`); the runtime squashfs on the
+    plus a 15-minute cron job `/etc/periodic/15min/panda-soloist-update`, see below); the runtime squashfs on the
     boot media (installed by setup.sh from deploy.sh), mounted at /opt/soloist-runtime; API key in
     `/etc/panda/soloist.key` (0640 root:speaker, lbu). The key is a CLI argument, so `/proc` is
     remounted `hidepid=invisible` (verified hidden from `panda`). Session/cache in RAM.
@@ -614,7 +614,15 @@ Later:
 - Wlcore firmware-crash recovery power-cycles Wi-Fi and takes BT down: watch for it.
 - Upstream notes: Alpine shairport-sync configure flags; PipeWire 1.6.8 raop-sink iov bug.
 - Kernel cleanup: OMAP remoteproc (120 MB CMA) and the omap4-keypad probe error.
-- Spotify Soloist builds expire after 90 days: confirm the weekly update job renews it.
+- Spotify Soloist builds expire after 90 days. Updates (2026-11-04, tested on the xM):
+  `soloist-update.sh due` runs every 15 min and checks Spotify when due (first run since
+  boot, weekly by uptime, binary broken, or build >= 80 days old), retrying failed downloads,
+  since busybox crond doesn't catch up on a missed weekly run. A new build must run
+  `--version` and is staged as `soloist.next`; speaker-soloist's start_pre swaps it in, and the
+  job restarts Soloist only while Spotify isn't playing. Found on the way: replacing the binary
+  under the running Soloist left the FAT card read-write (an open deleted file makes
+  `remount,ro` fail with EBUSY), silently, after every update. Spotify publishes builds often
+  (two on 2026-11-04). Still to confirm: a real expiry gets renewed.
 
 ### Project layout
 

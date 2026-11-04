@@ -1,0 +1,5 @@
+#!/bin/sh
+# Keep Spotify Soloist current (builds expire after 90 days). Every 15 minutes
+# it only checks whether an update is due: first run since boot, weekly, or the
+# binary broken or close to expiry (see soloist-update.sh).
+exec /etc/panda/soloist-update.sh due

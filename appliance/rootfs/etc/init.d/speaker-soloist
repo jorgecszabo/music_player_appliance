@@ -4,8 +4,9 @@
 # Soloist is a glibc binary; it runs through a Debian glibc + PipeWire-client
 # runtime (squashfs on the boot media, mounted at /opt/soloist-runtime).
 # The binary lives on the boot media and is downloaded from Spotify by
-# /etc/panda/soloist-update.sh. Session and cache are in RAM: after a reboot,
-# picking the device in the Spotify app logs it in again.
+# /etc/panda/soloist-update.sh, kept current by its 15-minute cron job.
+# Session and cache are in RAM: after a reboot, picking the device in the
+# Spotify app logs it in again.
 
 description="Spotify Connect receiver (Spotify Soloist, user speaker)"
 supervisor=supervise-daemon
@@ -34,13 +35,13 @@ start_pre() {
 	. /etc/panda/appliance.conf
 	local media=/media/"$BOOT_MEDIA"/soloist
 	[ -s /etc/panda/soloist.key ] || { eerror "no API key in /etc/panda/soloist.key"; return 1; }
-	if ! mountpoint -q "$RT"; then
-		mkdir -p "$RT"
-		mount -o loop,ro "$media"/soloist-runtime.squashfs "$RT" \
-			|| { eerror "can't mount $media/soloist-runtime.squashfs"; return 1; }
-	fi
-	[ -x "$media"/soloist ] || /etc/panda/soloist-update.sh \
-		|| { eerror "no Soloist binary and the download failed"; return 1; }
+	/etc/panda/soloist-update.sh mount \
+		|| { eerror "can't mount $media/soloist-runtime.squashfs"; return 1; }
+	# A build the update job downloaded while Soloist ran is swapped in now.
+	/etc/panda/soloist-update.sh activate || ewarn "couldn't activate the staged Soloist build"
+	# Missing, or broken by a power cut: download it again.
+	/etc/panda/soloist-update.sh check || { /etc/panda/soloist-update.sh && /etc/panda/soloist-update.sh activate; } \
+		|| { eerror "no working Soloist binary and the download failed"; return 1; }
 	# The API key is a command-line argument: hide other users' processes.
 	mount -o remount,hidepid=invisible /proc
 	checkpath --directory --owner speaker:speaker --mode 0700 \

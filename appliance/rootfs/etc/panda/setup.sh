@@ -180,6 +180,8 @@ if [ -f "$new_rt" ] && ! cmp -s "$new_rt" "$soloist_dir"/soloist-runtime.squashf
 	[ "$rc" -eq 0 ] || { log "ERROR: installing the Soloist runtime failed"; exit 1; }
 fi
 [ -x "$soloist_dir"/soloist ] || /etc/panda/soloist-update.sh || log "WARNING: Soloist download failed"
+# Updates moved from a weekly job to a 15-minute "is it due" job (soloist-update.sh due).
+rm -f /etc/periodic/weekly/panda-soloist-update
 # The key is read by speaker-soloist's start_pre (as root) and passed to Soloist,
 # so only root needs to read it. (Not group speaker: panda-web is in that group.)
 if [ -s /etc/panda/soloist.key ]; then

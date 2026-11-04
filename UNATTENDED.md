@@ -105,6 +105,22 @@ Fixes to try, keeping only what measurably helps:
   Prepare a patch for later, don't install it.
 - Web page: watchdog/kernel info, small polish.
 
+### 9. Last: platform-specific vs generic (requested 2026-11-04, after everything else)
+
+Goal: building this same appliance for another board should be easy. Done after all other
+tasks are committed.
+- Audit every file for board assumptions (OMAP4/PandaBoard, TWL6040, WL1271, mmcblk0p1,
+  armv7, ttyS2, LED/button names, watchdog device, 96 kHz, crackle workarounds, raw-mode
+  MLO/u-boot, Soloist arm32 build, Debian armhf runtime) and move them behind `board.conf` or
+  into `boards/<board>/`.
+- Generic `appliance/` + generic scripts; per-board: kernel aport/fragment, bootloader,
+  card writer, mkimage profile, board.conf (audio quirks such as the TWL6040 workarounds as
+  board options, not hard-coded).
+- Document "porting to a new board" step by step (README), with a template board directory
+  (e.g. `boards/_template/`) and a checklist of what to fill in and test.
+- Check the portability by dry-running the generic parts for a second architecture where
+  possible (e.g. generate configs for an aarch64 board.conf), without hardware.
+
 ---
 
 ## Results log

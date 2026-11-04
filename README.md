@@ -12,7 +12,7 @@ See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 ```sh
 scripts/build-container.sh                       # target-arch Alpine build container
 scripts/setup-keys.sh                            # abuild signing key (once; back up keys/*.rsa)
-boards/pandaboard/u-boot/build.sh                # U-Boot v2024.07 (needs gcc-arm-linux-gnu)
+scripts/build-u-boot.sh                          # U-Boot v2024.07 (needs gcc-arm-linux-gnu)
 scripts/build-package.sh linux-pandaboard        # kernel, cross-compiled (~10 min)
 scripts/build-image.sh                           # diskless image into build/sdimage/
 sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage   # erases the card
@@ -31,7 +31,9 @@ or drop one onto the card's boot partition (imported at boot, then deleted):
 Otherwise boot with Ethernet and pick a network on the web page (Network).
 
 Other boards: `BOARD=<name>` selects `boards/<name>/`. That directory needs a
-`board.conf`, an `mkimg.<name>.sh` profile and a card writer.
+`board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile
+and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
+`scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
 
 ## Debugging
 

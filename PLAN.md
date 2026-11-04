@@ -608,9 +608,10 @@ boards/<board>/            everything board-specific (only pandaboard so far)
                            Also installed on the device as /etc/panda/board.conf
   mkimg.<board>.sh         mkimage profile (reads board.conf + appliance files)
   write-sdcard.sh          SD card writer (pandaboard: raw-mode U-Boot + FAT32)
-  u-boot/build.sh, swap.sh U-Boot v2024.07 build / swap U-Boot on a written card
-  aports/<pkg>/            board packages (linux-pandaboard: APKBUILD,
-                           cross-build.sh, pandaboard.config fragment)
+  u-boot/swap.sh           swap U-Boot on a written card
+  aports/<pkg>/            board packages (linux-pandaboard: APKBUILD with the
+                           defconfig/fragment/DTB list, cross-build.sh wrapper,
+                           pandaboard.config fragment)
 appliance/                 board-independent
   appliance.conf           hostname, speaker name, admin user (/etc/panda/appliance.conf)
   packages.list            packages for the card's local repository
@@ -622,7 +623,8 @@ aports/<pkg>/              generic packages (shairport-sync with the native Pipe
 container/                 Containerfile (target-arch abuild/mkimage env),
                            Containerfile.cross (x86_64 + arm-none-eabi-gcc)
 scripts/                   env.sh (BOARD selection), alpine.sh, build-container.sh,
-                           setup-keys.sh, build-package.sh, build-image.sh,
+                           setup-keys.sh, build-u-boot.sh, build-package.sh,
+                           cross-build-kernel.sh, build-image.sh,
                            update-boot-files.sh, deploy.sh (push rootfs + run setup.sh),
                            build-soloist-runtime.sh (glibc runtime squashfs), serial-sysrq.py
 build/, packages/          outputs (gitignored)

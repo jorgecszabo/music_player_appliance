@@ -3,10 +3,10 @@
 # Linux LTS kernel for the PandaBoard (OMAP4430) audio appliance.
 #
 # The kernel is cross-compiled natively on the x86_64 build host by
-# cross-build.sh (Alpine's arm-none-eabi-gcc, ~10 min instead of ~2 h under
-# qemu-user), into build/kernel-staging. This APKBUILD only packages those
-# files. scripts/build-package.sh runs cross-build.sh first.
-# Config: omap2plus_defconfig + pandaboard.config.
+# scripts/cross-build-kernel.sh (Alpine's arm-none-eabi-gcc, ~10 min instead of
+# ~2 h under qemu-user), into build/kernel-staging/<flavor>. This APKBUILD only
+# packages those files. scripts/build-package.sh runs cross-build.sh first.
+# Config: _defconfig + _fragment; DTBs: _dtbs (relative to arch/arm/boot/dts/).
 # Layout follows main/linux-lts so update-kernel / mkimage / the modloop
 # service work unchanged: release "<ver>-<pkgrel>-pandaboard",
 # /boot/{vmlinuz,System.map,config}-pandaboard, /boot/dtbs-pandaboard/.
@@ -22,7 +22,13 @@ depends="initramfs-generator"
 options="!strip !check !tracedeps"
 # The fragment is listed so its checksum is recorded with the package.
 source="pandaboard.config"
-_staging="${PANDA_KERNEL_STAGING:-/work/build/kernel-staging}"
+# Read by scripts/cross-build-kernel.sh (single-line values).
+_defconfig=omap2plus_defconfig
+_fragment=pandaboard.config
+_dtbs="ti/omap/omap4-panda*.dtb"
+# The staged config must have this (catches a wrong or stale staging dir).
+_kconfig_check="CONFIG_ARCH_OMAP4=y"
+_staging="${PANDA_KERNEL_STAGING:-/work/build/kernel-staging/$_flavor}"
 
 package() {
 	local _rel="$pkgver-$pkgrel-$_flavor"
@@ -30,8 +36,8 @@ package() {
 		|| die "no staged kernel in $_staging (run cross-build.sh)"
 	[ "$(cat "$_staging"/usr/share/kernel/$_flavor/kernel.release)" = "$_rel" ] \
 		|| die "staged kernel is not $_rel"
-	grep -q '^CONFIG_ARCH_OMAP4=y' "$_staging"/boot/config-$_flavor \
-		|| die "staged config is not an OMAP4 config"
+	grep -qx "$_kconfig_check" "$_staging"/boot/config-$_flavor \
+		|| die "staged config lacks $_kconfig_check"
 
 	mkdir -p "$pkgdir"
 	cp -a "$_staging"/. "$pkgdir"/

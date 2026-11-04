@@ -10,20 +10,20 @@
 # The boot files go in twice, so either OMAP4 ROM boot method works:
 #   raw:  MLO at sector 256 (128 KiB), u-boot.img at sector 768 (384 KiB)
 #   FAT:  MLO (copied first) and u-boot.img on p1
-# UBOOT_DIR=<dir> selects another MLO/u-boot.img (default build/u-boot-out).
+# UBOOT_DIR=<dir> selects another MLO/u-boot.img (default build/u-boot-out/<board>).
 # A report is written to build/sdcard-report.txt.
 set -euo pipefail
 BOARD="$(basename "$(cd "$(dirname "$0")" && pwd)")"   # this script's board
 source "$(dirname "$0")/../../scripts/env.sh"
 DEV="${1:?usage: $0 /dev/sdX [staging-dir]}"
 STAGE="${2:-}"
-UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out}")"
+UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out/$BOARD}")"
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)"; exit 1; }
 [ -b "$DEV" ] || { echo "$DEV is not a block device"; exit 1; }
 [ "$(lsblk -dno TYPE "$DEV")" = disk ] || { echo "$DEV is not a whole disk"; exit 1; }
 for f in MLO u-boot.img; do
-    [ -f "$UBOOT_OUT/$f" ] || { echo "missing $UBOOT_OUT/$f, run boards/pandaboard/u-boot/build.sh"; exit 1; }
+    [ -f "$UBOOT_OUT/$f" ] || { echo "missing $UBOOT_OUT/$f, run scripts/build-u-boot.sh"; exit 1; }
 done
 
 # Safety: refuse disks that host mounted system filesystems, and non-removable

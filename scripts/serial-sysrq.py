@@ -16,6 +16,7 @@ import time
 PORT = os.environ.get("PANDA_SERIAL", "/dev/ttyUSB0")
 KEYS = sys.argv[1] if len(sys.argv) > 1 else "wl"
 READ_SECONDS = 10
+READ_SECONDS_PER_KEY = {"t": 40}  # all-task dumps are long at 115200 baud
 LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "serial-sysrq.log")
 
 
@@ -62,7 +63,7 @@ def main():
             termios.tcsendbreak(fd, 0)  # BREAK = SysRq on a serial console
             time.sleep(0.2)
             os.write(fd, key.encode())
-            read_for(fd, READ_SECONDS, out)
+            read_for(fd, READ_SECONDS_PER_KEY.get(key, READ_SECONDS), out)
     os.close(fd)
     print(f"\nsaved to {os.path.normpath(LOG)}")
 

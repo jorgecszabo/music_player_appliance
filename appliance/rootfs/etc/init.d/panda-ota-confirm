@@ -12,13 +12,7 @@ depend() {
 
 start() {
 	ebegin "Starting the update health check"
-	start-stop-daemon --start --background --make-pidfile \
-		--pidfile /run/panda-ota-confirm.pid \
-		--exec /usr/bin/python3 -- /etc/panda/panda-ota.py confirm
-	eend $?
-}
-
-stop() {
-	start-stop-daemon --stop --quiet --pidfile /run/panda-ota-confirm.pid 2>/dev/null
-	return 0
+	# A one-shot in the background (not a daemon: it ends once the trial is decided).
+	setsid python3 /etc/panda/panda-ota.py confirm </dev/null >/dev/null 2>&1 &
+	eend 0
 }

@@ -321,3 +321,13 @@ installation is acceptable. If the board doesn't come back (no serial access fro
 - Found: `apk audit` reports everything under `etc/apk/` as added, so lbu rules shipped
   there would be saved and shadow later versions; now copied from `/etc/panda/lbu-paths.list`
   at every boot.
+- **Second OTA (b -> a) over SSH:** installed, activated through web-admin; the warm reboot
+  hung before userspace (the rollback wasn't armed yet, so the power-cycled boot was still the
+  trial). Then: trial boot, armed, confirmed after 30 s. The xM's warm reboots sometimes hang
+  (owner power-cycles); Level 1 can't help there, only a power cycle (or Level 2 + watchdog
+  for kernel hangs).
+- **Web upload:** `POST /api/ota/upload` with a 109 MiB bundle: verified and installed into
+  slot b in 81 s. Junk, a missing X-Panda-Panel header, a simple Content-Type and a foreign
+  Host are refused (400/403/403/421). The owner checked the System Update window.
+- Fixes: panda-ota-confirm is a one-shot (OpenRC showed it "crashed" after confirming); the
+  health check also needs a network address; non-bundle uploads get a clean error.

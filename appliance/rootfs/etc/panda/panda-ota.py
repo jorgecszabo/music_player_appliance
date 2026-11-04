@@ -343,15 +343,18 @@ def cmd_install(stream):
     if st["trial"]:
         die(f"slot {st['trial']} is on trial: finish that first (reboot)")
     target = other(booted)
-    tf = tarfile.open(fileobj=stream, mode="r|")
-    m = tf.next()
-    if m is None or m.name != "manifest.json":
-        die("not an update bundle (no manifest.json first)")
-    manifest_raw = read_member(tf, m, MAX_MANIFEST)
-    s = tf.next()
-    if s is None or s.name != "manifest.sig":
-        die("not an update bundle (no manifest.sig)")
-    sig = read_member(tf, s, 4096)
+    try:
+        tf = tarfile.open(fileobj=stream, mode="r|")
+        m = tf.next()
+        if m is None or m.name != "manifest.json":
+            die("not an update bundle (no manifest.json first)")
+        manifest_raw = read_member(tf, m, MAX_MANIFEST)
+        s = tf.next()
+        if s is None or s.name != "manifest.sig":
+            die("not an update bundle (no manifest.sig)")
+        sig = read_member(tf, s, 4096)
+    except (tarfile.TarError, EOFError, OSError):
+        die("not an update bundle (not a tar file)")
     key = verify_signature(manifest_raw, sig)
     try:
         man = json.loads(manifest_raw)
@@ -523,6 +526,11 @@ def healthy():
         return "FAIL_HEALTH test flag in the slot"
     if TEST:
         return None
+    # A network speaker that isn't on the network is broken, even if it runs.
+    addrs = subprocess.run(["ip", "-o", "addr", "show", "scope", "global"],
+                           capture_output=True, text=True).stdout
+    if not addrs.strip():
+        return "no network address"
     for svc in REQUIRED_SERVICES:
         if subprocess.run(["rc-service", svc, "status"], capture_output=True).returncode != 0:
             return f"{svc} is not running"

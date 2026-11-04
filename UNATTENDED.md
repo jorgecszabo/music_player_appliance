@@ -72,6 +72,18 @@ Fixes to try, keeping only what measurably helps:
 - Test with AirPlay (container sender) against Spotify idle. Bluetooth paths only by code
   review (no phone).
 
+### 3b. Internet radio (requested 2026-11-04)
+
+- Stations from radio-browser.info (its public API: search by name/country/tag/top voted,
+  resolve the stream URL via its `url_resolved`, send a click on play as the API asks).
+- Playback with mpv (headless, `--no-video`, PipeWire audio output) as user speaker, a small
+  `speaker-radio` service controlled through mpv's JSON IPC socket. It plays into the tone
+  filter like every other source and takes part in last source wins.
+- Web page: a "Radio" window in the same 90s style (station search, results table, favorites,
+  play/stop, now-playing ICY title on the LCD). Favorites stored in /etc/panda (lbu, saved with
+  the same debounce as other settings).
+- Watch CPU: decoding MP3/AAC/Opus at the station's rate, resampled to 96 kHz.
+
 ### 4. Now-playing metadata
 
 - Spotify: Soloist's `-w` WebSocket API (localhost only), feeding title/artist to the LCD.

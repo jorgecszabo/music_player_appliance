@@ -43,7 +43,8 @@ start_pre() {
 	command="$RT/lib/ld.so"
 	command_args="--library-path $RT/lib $media/soloist
 		-n \"$SPEAKER_NAME\" -k \"$(cat /etc/panda/soloist.key)\"
-		-D /var/lib/speaker/soloist-data -C /var/lib/speaker/soloist-cache -z 100"
+		-D /var/lib/speaker/soloist-data -C /var/lib/speaker/soloist-cache -z 100
+		-w 127.0.0.1:47000"
 	supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker
 		--env HOME=/var/lib/speaker --env PIPEWIRE_MODULE_DIR=$RT/pipewire-0.3
 		--env SPA_PLUGIN_DIR=$RT/spa-0.2 --env PIPEWIRE_CONFIG_DIR=$RT/share/pipewire"

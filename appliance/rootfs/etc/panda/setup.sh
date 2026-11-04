@@ -262,6 +262,13 @@ pipewire = {
 	application_name = "AirPlay";
 	node_name = "airplay";
 };
+// Track info for the web page (read by panda-arbiter).
+metadata = {
+	enabled = "yes";
+	include_cover_art = "no";
+	pipe_name = "/run/speaker/shairport-metadata";
+	pipe_timeout = 5000;
+};
 EOF
 # The package's own (root) service isn't used: speaker-shairport runs it.
 rc-update del shairport-sync default >/dev/null 2>&1 || true
@@ -333,7 +340,7 @@ if [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ]; then
 fi
 sysctl -q -p /etc/sysctl.d/90-panda.conf || true
 for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
-	speaker-shairport bluetooth panda-bt panda-chime-boot panda-web crond; do
+	speaker-shairport speaker-arbiter bluetooth panda-bt panda-chime-boot panda-web crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
 # Load/refresh the firewall now (also on redeploys with changed rules).

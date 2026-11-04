@@ -43,11 +43,12 @@ if [ "$RESTART" = "--restart" ]; then
     ssh -o BatchMode=yes "$HOST" 'doas sh -c "
         # Stop dependents first, then start in order (restarting pipewire on
         # its own stops wireplumber without openrc noticing).
-        rc-service panda-bt stop; rc-service speaker-shairport stop; rc-service speaker-soloist stop; rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
+        rc-service panda-bt stop; rc-service speaker-arbiter stop; rc-service speaker-shairport stop; rc-service speaker-soloist stop; rc-service speaker-wireplumber stop; rc-service speaker-pipewire stop
         rc-service panda-audio-init restart || exit 1
         rc-service speaker-pipewire start && rc-service speaker-wireplumber start || exit 1
         rc-service speaker-soloist start || exit 1
         rc-service speaker-shairport start || exit 1
+        rc-service speaker-arbiter start || exit 1
         rc-service bluetooth restart; rc-service panda-bt start || exit 1
         rc-service panda-web restart || exit 1
         sleep 2; rc-status default | grep -E \"panda|speaker\""'

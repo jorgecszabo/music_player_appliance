@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+# Last source wins + now-playing info (/etc/panda/panda-arbiter.py), as user
+# speaker: pauses or mutes the older source when a new one starts playing.
+
+description="Last source wins and now-playing info (user speaker)"
+supervisor=supervise-daemon
+command=/usr/bin/python3
+command_args="/etc/panda/panda-arbiter.py"
+command_user="speaker:speaker"
+directory=/var/lib/speaker
+output_log=/var/log/speaker/arbiter.log
+error_log=/var/log/speaker/arbiter.log
+respawn_delay=3
+respawn_max=0
+supervise_daemon_args="--env XDG_RUNTIME_DIR=/run/speaker --env PIPEWIRE_RUNTIME_DIR=/run/speaker --env HOME=/var/lib/speaker"
+
+depend() {
+	need speaker-wireplumber
+	after speaker-soloist speaker-shairport
+}

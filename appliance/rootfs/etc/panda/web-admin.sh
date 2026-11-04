@@ -31,6 +31,7 @@ restart_audio() {
 	rc-service panda-audio-init restart
 	rc-service speaker-pipewire start; rc-service speaker-wireplumber start
 	rc-service speaker-soloist start; rc-service speaker-shairport start
+	rc-service speaker-arbiter start
 	rc-service panda-bt start
 }
 
@@ -56,7 +57,7 @@ chrony)
 	chronyc -n tracking 2>&1 || true ;;
 logs)
 	case "${2:-}" in
-		pipewire|wireplumber|soloist|shairport) f=/var/log/speaker/$2.log ;;
+		pipewire|wireplumber|soloist|shairport|arbiter) f=/var/log/speaker/$2.log ;;
 		panda-bt|panda-web|panda-web-admin) f=/var/log/$2.log ;;
 		messages) f=/var/log/messages ;;
 		*) die "unknown log: ${2:-}" ;;

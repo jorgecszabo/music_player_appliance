@@ -45,7 +45,7 @@ SERVICES = ["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-w
             "chronyd", "sshd", "crond", "panda-web"]
 RESTARTABLE = {"speaker-soloist", "speaker-shairport", "panda-bt", "bluetooth",
                "avahi-daemon", "chronyd"}
-LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "panda-bt", "panda-web",
+LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "panda-bt", "panda-web",
         "panda-web-admin", "messages"]
 
 

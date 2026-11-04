@@ -225,6 +225,10 @@ These make it behave like a commercial speaker. Built during Phases 4–6.
 passthrough, amplifier auto-power / HDMI-CEC, network updates, Home Assistant,
 UPnP/DLNA local files, multiroom (Snapcast), IR remote / rotary encoder,
 display, radio presets / alarm.
+USB Wi-Fi as an ethernet alternative: needs a kernel rebuild with `CFG80211`,
+`MAC80211` + the dongle's mainline driver, plus its firmware in the modloop. Pick
+MediaTek MT7612U (`mt76x2u`) or MT7921AU (`mt7921u`); Realtek 88x1CU (`rtw88`) is
+OK. Avoid out-of-tree drivers.
 
 ## Users and privileges (decided 2026-11-03)
 

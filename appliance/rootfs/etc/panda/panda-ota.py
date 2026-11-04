@@ -171,7 +171,7 @@ def booted_slot():
 
 
 def read_state():
-    st = {"confirmed": None, "trial": None}
+    st = {"confirmed": None, "trial": None, "failed": None}
     try:
         for line in open(STATE):
             k, _, v = line.strip().partition("=")
@@ -185,7 +185,8 @@ def read_state():
 
 
 def write_state(st):
-    write_atomic(STATE, "".join(f"{k}={st[k]}\n" for k in ("confirmed", "trial") if st.get(k)))
+    write_atomic(STATE, "".join(f"{k}={st[k]}\n" for k in ("confirmed", "trial", "failed")
+                                if st.get(k)))
 
 
 def slot_info(slot):
@@ -310,8 +311,7 @@ def cmd_status():
                       "trial": st["trial"], "standby": other(booted) if booted else None,
                       "slots": slots, "free": free, "running": cur,
                       "board": BOARD.get("BOARD"), "arch": BOARD.get("ALPINE_ARCH"),
-                      "rolled_back": os.path.exists((MEDIA + "/.run" if TEST else "/run/panda")
-                                                    + "/ota-rollback")}))
+                      "rolled_back": st["failed"]}))
 
 
 def verify_signature(manifest, sig):
@@ -467,6 +467,7 @@ def cmd_activate(slot=None):
             os.replace(snap + ".new", snap)
         st["confirmed"] = booted
         st["trial"] = slot
+        st["failed"] = None
         write_state(st)
         write_boot(slot)
     log(f"slot {slot} ({slot_info(slot).get('version')}) boots next, on trial")
@@ -507,6 +508,7 @@ def cmd_boot():
     restore = os.path.exists(snap) and (not os.path.exists(ovl) or
                                         open(snap, "rb").read() != open(ovl, "rb").read())
     with Media():
+        st["failed"] = st["trial"]
         st["confirmed"] = booted
         st["trial"] = None
         write_state(st)

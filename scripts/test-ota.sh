@@ -88,9 +88,9 @@ check "unhealthy trial: default stays b" test "$(default)" = b
 boot_slot b; ota boot 2>"$T/err"
 check "failed trial noticed" grep -q "failed" "$T/err"
 check "failed trial: settings restored from slot b's snapshot" cmp -s "$T/media/panda.apkovl.tar.gz" "$T/media/slots/b/settings.apkovl.tar.gz"
-check "failed trial: state confirmed=b" test "$(state)" = "confirmed=b "
+check "failed trial: state confirmed=b failed=a" test "$(state)" = "confirmed=b failed=a "
 check "rollback flag for the web page" test -f "$T/media/.run/ota-rollback"
 ota status > "$T/status"
-check "status is JSON with both slots" python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["slots"]["a"] and d["slots"]["b"] and d["booted"]=="b"' "$T/status"
+check "status is JSON with both slots" python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["slots"]["a"] and d["slots"]["b"] and d["booted"]=="b" and d["rolled_back"]=="a"' "$T/status"
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

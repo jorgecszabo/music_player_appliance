@@ -242,6 +242,29 @@ OK. Avoid out-of-tree drivers.
 Network-facing daemons never run as root. The firewall limits services to the
 LAN subnet.
 
+## Side quest: McPDM driver root cause (recorded 2026-11-03, not started)
+
+The Phase 4 crackle fix is a **workaround** (keep the sink fed with silence, IRQ scheduling).
+Driver findings (`sound/soc/ti/omap-mcpdm.c`, 6.18):
+- The McPDM link starts in `prepare` and stops only at `shutdown` (close). The DAI has **no
+  `trigger` callback**, so on stop/pause/underrun the DMA stops feeding the DN FIFO while the
+  link to the TWL6040 keeps running. That matches every crackle case (idle-open, the suspend
+  timeout, underruns). The DN FIFO-empty IRQ is enabled but only `dev_dbg`s.
+- Legacy mode is rarely exercised: in TI's original stack the ABE DSP always kept the FIFO fed.
+- The tsched underruns are **not** explained by DMA position granularity: OMAP4 sDMA reports at
+  burst granularity (DN maxburst = (16-2) x channels = 28 words). Candidates: the 32 kHz
+  clocksource/clockevent (`32k_counter`, gptimer 32768 Hz; ~30 us timestamps for PipeWire's
+  DLL), and/or no `.delay` reporting for the FIFO. Unverified.
+
+Plan:
+1. Confirm: enable `omap_mcpdm` dynamic debug (check `CONFIG_DYNAMIC_DEBUG`; otherwise rebuild
+   r3) and watch for "DN (playback) FIFO Empty" while the PCM is open and idle.
+2. Patch: add a DAI `trigger` that stops/mutes the DN link (or keeps the FIFO zero-filled) on
+   STOP/PAUSE_PUSH/SUSPEND and restarts on START/PAUSE_RELEASE; check the TWL6040 for pops.
+3. Retest with stock PipeWire settings (suspend on idle, tsched); investigate tsched separately
+   if needed. If it works, send it upstream (linux-sound / linux-omap).
+Gain: the device can close when idle (about 1% CPU, codec powered down), plus an upstream fix.
+
 ## Portability (design rule, decided 2026-11-03)
 
 The Panda is 16 years old; the repo should survive it.

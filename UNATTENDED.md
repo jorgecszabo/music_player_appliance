@@ -282,3 +282,15 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   quantum 1024, dual-mode BT, tone filter -> its USB DAC node). Soloist builds exist for
   arm32/arm64/x86_64; the glibc runtime builder maps all three. The web page hides "Max volume"
   without a hardware gain control. Python config parsing handles trailing comments now.
+
+### Task 7: image (done in the morning; not written to a card)
+
+- Kernel r3 (6.18.60-r3): soft-lockup panic, hung-task reports, watchdog sysfs, no 1-Wire/HDQ
+  bq27000. (First packaging run failed only on the fragment checksum.)
+- `build/sdimage/` (171 MB): 281 packages in the card's repository (ours: shairport-sync r100),
+  the overlay with all of appliance/rootfs and a first-boot script that runs setup.sh offline
+  and reboots, `factory/` = the image overlay, the Soloist runtime, pre-synthesized chimes.
+  No Soloist binary (downloaded by the device) and no API key (entered on the web page).
+- To test: `sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage` (erases the card;
+  a second card keeps the current one as it is). First boot: about 1-2 min of setup, then a
+  reboot into the appliance; then set the API key on the web page and pair the phone again.

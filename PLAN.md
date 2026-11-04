@@ -238,6 +238,22 @@ display, radio presets / alarm.
 Network-facing daemons never run as root. The firewall limits services to the
 LAN subnet.
 
+## Portability (design rule, decided 2026-11-03)
+
+The Panda is 16 years old; the repo should survive it.
+- After Phase 3 boots, move board-specific parts into `boards/pandaboard/`:
+  U-Boot build, kernel aport and fragment, mkimage profile bits, and a
+  **`board.conf`** (ALSA card + mixer setup, sample rate, BT controller and
+  firmware, button input device, LED names, serial console, lbu media,
+  Alpine arch).
+- The Phase 4–6 userspace (audio services, pairing, chimes, web page, reset)
+  reads `/etc/panda/board.conf` and never hardcodes `ttyS2`, `TWL6040`, GPIO 121
+  or LED names.
+- Build scripts take the arch/board as a parameter (no hardcoded `armv7`).
+- Likely successor (Raspberry Pi or x86 mini PC, plus a USB DAC): uses Alpine's
+  stock kernel and boot, so the board directory is only a profile and
+  `board.conf`.
+
 ## Phase 6: Hardening and polish
 
 - `rc_parallel`; only needed services; getty on serial only.

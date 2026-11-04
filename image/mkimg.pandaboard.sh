@@ -36,10 +36,14 @@ profile_pandaboard() {
 	kernel_flavors="pandaboard"
 	kernel_addons=
 	initfs_features="base mmc squashfs usb"
+	# No "quiet": the boot log on serial is the main debugging tool.
+	initfs_cmdline="modules=loop,squashfs,sd-mod,usb-storage"
 	kernel_cmdline="console=ttyS2,115200n8"
 	# hci_ll builds the firmware name at runtime, so modinfo doesn't list it.
 	modloopfw="ti-connectivity/TIInit_7.2.31.bts.zst"
 	pandaboard_extlinux=yes
+	# U-Boot + extlinux boot; no GRUB/EFI (profile_base enables it for ARM).
+	grub_mod=
 	apks="alpine-base apk-cron busybox chrony doas openssh openssl tzdata wget
 		e2fsprogs dosfstools alsa-utils bluez bluez-deprecated"
 	apkovl="genapkovl-pandaboard.sh"

@@ -43,6 +43,9 @@ CONTROL_SOCK = RUN + "/wifi.sock"
 CONTROL_GROUP = "panda-web"
 WPA_DIR = "/run/wpa_supplicant"
 WPA_CONF = RUN + "/wpa_supplicant.conf"
+PENDING_TIMEOUT = 180     # s: how long Connect keeps trying a new network before giving up
+RETRY_PENDING = 10        # s: idle time before nudging wpa_supplicant to retry (new network)
+RETRY_SAVED = 30          # s: same, for saved networks while disconnected
 
 
 def log(*a):
@@ -199,7 +202,7 @@ def security(flags):
 
 def wpa_conf_text(conf):
     lines = [f"ctrl_interface=DIR={WPA_DIR} GROUP=0", "update_config=0", "ap_scan=1",
-             "autoscan=exponential:3:300", "sae_pwe=2"]
+             "sae_pwe=2"]
     if conf.get("country"):
         lines.append(f"country={conf['country']}")
     n = len(conf["networks"])
@@ -357,7 +360,8 @@ class Wifi:
         self.results = []            # latest scan results
         self.results_at = 0.0
         self.scan_done = threading.Event()
-        self.pending = None          # {"ssid", "entry", "until"} while trying a new network
+        self.pending = None          # {"ssid", "entry", "until", ...} while trying a new network
+        self.nudged = 0.0            # last time we told wpa_supplicant to try again
         self.last_error = ""
         self.gen = 0                 # bumps when the active adapter changes
 
@@ -502,6 +506,8 @@ class Wifi:
                     p = self.pending
                     if p and time.monotonic() > p["until"]:
                         self.fail_pending("couldn't connect (no answer, or out of range)")
+                    elif self.iface:
+                        self.nudge()
             except Exception as e:      # never die: this is the only way in without Ethernet
                 log("supervisor error:", e)
             time.sleep(3)
@@ -567,6 +573,24 @@ class Wifi:
             log(f"{ifname}: disconnected (reason {m.group(1) if m else '?'})")
         elif msg.startswith("CTRL-EVENT-NETWORK-NOT-FOUND") and self.pending:
             pass   # keeps scanning until the pending timeout
+
+    def nudge(self):
+        """Keep trying. After an auth/assoc timeout wpa_supplicant ignores the BSSID and
+        can sit in SCANNING for a long time without another attempt; on a weak link
+        (the WL1271 shares its antenna with Bluetooth) a later try often gets through."""
+        p = self.pending
+        every = RETRY_PENDING if p else RETRY_SAVED
+        now = time.monotonic()
+        if now - self.nudged < every or not (p or self.conf["networks"]):
+            return
+        st = self.wpa_status().get("wpa_state", "")
+        if st not in ("SCANNING", "DISCONNECTED", "INACTIVE"):
+            return                   # connected, or an attempt is under way
+        self.nudged = now
+        if p:
+            p["tries"] = p.get("tries", 0) + 1
+        self.wpa_req("BSSID_IGNORE clear")
+        self.wpa_req("REASSOCIATE")
 
     def fail_pending(self, why, ssid=None):
         p = self.pending
@@ -663,6 +687,7 @@ class Wifi:
 
     def status(self):
         ad, ads = self.choose()
+        pend = self.pending
         onboard_bands = self.board.get("WIFI_ONBOARD_BANDS", "")
         for a in ads:
             if a["kind"] == "onboard" and onboard_bands:
@@ -676,7 +701,8 @@ class Wifi:
                           else "wpa2" if e.get("psk") else "open", "hidden": bool(e.get("hidden"))}
                          for e in self.conf["networks"]],
                "iface": self.iface, "state": "off" if ad is None else "starting",
-               "pending": self.pending["ssid"] if self.pending else None,
+               "pending": pend["ssid"] if pend else None,
+               "pending_tries": pend.get("tries", 0) if pend else 0,
                "error": self.last_error}
         if self.iface and self.ctrl:
             st = self.wpa_status()
@@ -722,7 +748,8 @@ class Wifi:
             entry = make_entry(ssid, pw, hidden, sae=(sec == "wpa3"))
         log(f"connecting to {ssid!r} ({sec or 'not in the scan'})")
         self.last_error = ""
-        self.pending = {"ssid": ssid, "entry": entry, "until": time.monotonic() + 45}
+        self.pending = {"ssid": ssid, "entry": entry, "until": time.monotonic() + PENDING_TIMEOUT}
+        self.nudged = time.monotonic()
         self.reload()
         nid = self.net_id(ssid)
         if nid is not None:

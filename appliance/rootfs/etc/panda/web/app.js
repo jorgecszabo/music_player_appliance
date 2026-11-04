@@ -505,7 +505,7 @@ function renderNetwork(s) {
   let text;
   if (w.error && !w.adapters) text = `Wi-Fi is not available: ${w.error}`;
   else if (!(w.adapters || []).length) text = "No wireless adapter found. Plug in a USB Wi-Fi adapter.";
-  else if (w.pending) text = `Connecting to ${w.pending}...`;
+  else if (w.pending) text = `Connecting to ${w.pending}...${w.pending_tries ? ` (retry ${w.pending_tries})` : ""}`;
   else if (c) {
     const a4 = (net.addrs || []).find((x) => x.if === w.iface && x.family === "inet");
     const ip = c.ip || (a4 ? a4.addr.split("/")[0] : "");

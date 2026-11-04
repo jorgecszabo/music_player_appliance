@@ -15,9 +15,11 @@ output_log=/var/log/speaker/soloist.log
 error_log=/var/log/speaker/soloist.log
 respawn_delay=10
 respawn_max=0
-# Like the other audio clients: lets libpipewire's module-rt give Soloist's
-# stream thread real-time priority (without it, on the single-core
-# BeagleBoard-xM its thread waited 7-13 ms of each 21 ms graph cycle).
+# Allows real-time priority like the other audio clients, but nothing uses it
+# yet: the runtime's minimal PipeWire client has no module-rt, and Soloist
+# runs its stream on its own pw_thread_loop ("pipewire-loop"), not a data
+# loop. Measured fine anyway on the single-core BeagleBoard-xM (~26% CPU,
+# no underruns), so left as is.
 rc_ulimit="-r 95 -e 40"
 
 RT=/opt/soloist-runtime

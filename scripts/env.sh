@@ -5,3 +5,4 @@ IMAGE="localhost/panda-alpine-build:${ALPINE_VERSION}"
 # Host cross toolchain (Fedora gcc-arm-linux-gnu) for fast kernel/U-Boot iteration.
 export CROSS_COMPILE=arm-linux-gnu-
 export ARCH=arm
+CROSS_IMAGE="localhost/panda-alpine-cross:${ALPINE_VERSION}"

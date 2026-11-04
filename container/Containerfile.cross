@@ -1,0 +1,13 @@
+# x86_64 Alpine with Alpine's ARM cross-compiler, for fast kernel builds
+# (the kernel doesn't need a target libc, so the bare-metal toolchain works).
+# The result is packaged into an armv7 .apk by the armv7 container.
+ARG ALPINE_VERSION=3.24
+FROM docker.io/library/alpine:${ALPINE_VERSION}
+
+RUN apk add --no-cache \
+        gcc-arm-none-eabi binutils-arm-none-eabi \
+        gcc musl-dev make bash bc bison flex perl python3 coreutils diffutils \
+        findutils elfutils-dev openssl-dev linux-headers kmod xz zstd tar
+
+# In rootless podman, container root maps to the host user.
+WORKDIR /work

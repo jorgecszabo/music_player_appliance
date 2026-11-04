@@ -169,6 +169,62 @@ arbitration, Bluetooth integration and the network sink.
 - **Persistence:** `/var/lib/bluetooth` (pairing keys) must be in lbu, and is
   committed after each new pairing.
 
+## Appliance features (decided 2026-11-03)
+
+These make it behave like a commercial speaker. Built during Phases 4–6.
+
+**Speaker identity**
+- One friendly name, **"Panda"**, from one config file (`/etc/panda/speaker.conf`).
+  Spotify Connect, the Bluetooth alias, AirPlay and the mDNS/hostname all read it.
+
+**Source handling**
+- **Last source wins:** a new stream (Spotify, AirPlay, BT) pauses the active
+  one where the protocol allows (Spotify/AirPlay remote control, AVRCP pause).
+  Otherwise the old one is muted. WirePlumber policy or a small watcher.
+- **One volume:** PipeWire sink volume, synced with BT absolute volume,
+  Spotify's volume and the AirPlay volume. A configurable **maximum volume**
+  cap, and a fixed **startup volume** (volume itself is not saved, so routine
+  changes never write to the card).
+- **Tone:** bass/treble (+ optional loudness compensation) through a PipeWire
+  filter-chain (biquads; a few % CPU at 96 kHz).
+
+**Feedback**
+- **Bose-style chimes, no speech:** short tones for boot-complete, pairing mode
+  on/off, BT connected, BT disconnected, factory reset. Small WAV/FLAC files
+  played with `pw-play` at a fixed level relative to the volume cap.
+- LEDs as in the Phase 5 button design.
+
+**Bluetooth extras**
+- **Auto-reconnect** to the most recently used phone at boot (and after BT
+  restarts).
+
+**Recovery**
+- **Factory reset:** hold S2 while powering on → wipe the saved config
+  (lbu overlay) back to the image defaults, chime, reboot. Checked very early in
+  boot. Needs a check of how early the button can be read relative to apkovl
+  loading. The fallback is a service that deletes the overlay and reboots.
+
+**Web page** (`http://panda.local/`, technical, for the owner)
+- Status: current source and stream info, PipeWire graph summary, sample rate and
+  xruns, CPU/load/memory/uptime, network, chrony sync, service states, recent log
+  lines.
+- Control: volume, volume cap, startup volume, bass/treble, speaker name, pairing
+  window (same as S2), list and forget paired devices, restart services, reboot.
+- Save: config changes go through one **"save to card" (lbu) path** with a
+  debounce, so the card is written rarely and deliberately.
+- Implementation: Python stdlib HTTP server + one static page with vanilla JS,
+  live updates via server-sent events. Data from `wpctl`/`pw-dump`, bluez D-Bus,
+  `/proc` + `/sys`, `rc-status`. No framework, no build step.
+- LAN only (firewall to the local subnet). Optional HTTP basic auth.
+- **Check `lbu commit` atomicity** (does it write in place or write+rename?). If
+  it writes in place, wrap it so a power cut mid-save can't leave a truncated
+  overlay. This is the one write window on the card.
+
+**Not now** (revisit later): USB volume knob (none on hand), line-in
+passthrough, amplifier auto-power / HDMI-CEC, network updates, Home Assistant,
+UPnP/DLNA local files, multiroom (Snapcast), IR remote / rotary encoder,
+display, radio presets / alarm.
+
 ## Phase 6: Hardening and polish
 
 - `rc_parallel`; only needed services; getty on serial only.

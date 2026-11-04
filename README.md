@@ -2,26 +2,60 @@
 
 Alpine Linux in diskless mode as a network/Bluetooth speaker. The root filesystem
 lives in RAM and the boot media stays read-only, so the power can be cut at any
-time. The first board is a PandaBoard rev A1 (OMAP4430); a BeagleBoard-xM
-(DM3730) port (`BOARD=beaglexm`) builds but is untested on hardware.
-Board-specific parts live in `boards/<board>/`, and everything else is
+time. Board-specific parts live in `boards/<board>/`, and everything else is
 board-independent.
 
 See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 
-## Build (Fedora host, rootless podman)
+## Supported boards
+
+| `BOARD=` | Board | SoC / Alpine arch | Kernel package | Audio out | Wi-Fi / Bluetooth |
+|---|---|---|---|---|---|
+| `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 (Wi-Fi doesn't connect yet), or USB |
+| `beaglexm` | BeagleBoard-xM | DM3730 (OMAP3), armv7 | `linux-beaglexm` | TWL4030 3.5 mm jack (48 kHz), or USB audio | none onboard: USB dongles |
+
+Both boot from an SD card through U-Boot v2024.07 (MLO + `u-boot.img`), with a
+serial console on `ttyS2` at 115200 8N1. Each board's `board.conf` describes its
+hardware in detail. To add a board, see [Porting](#porting-the-appliance-to-another-board).
+
+## Build an image (Fedora host, rootless podman)
+
+`BOARD=<name>` selects the board (default `pandaboard`). Every script reads it,
+so set it once for the whole build:
 
 ```sh
+export BOARD=beaglexm                            # or pandaboard
+
+# Once per host (the container is per Alpine arch)
 scripts/build-container.sh                       # target-arch Alpine build container
-scripts/setup-keys.sh                            # abuild signing key (once; back up keys/*.rsa)
-scripts/build-u-boot.sh                          # U-Boot v2024.07 (needs gcc-arm-linux-gnu)
-scripts/build-package.sh linux-pandaboard        # kernel, cross-compiled (~10 min)
-scripts/build-image.sh                           # diskless image into build/sdimage/pandaboard/
-sudo boards/pandaboard/write-sdcard.sh /dev/sdX build/sdimage/pandaboard   # erases the card
+scripts/setup-keys.sh                            # abuild signing key (back up keys/*.rsa)
+
+# Once per Alpine arch (armv7 is shared by both boards), and again when a fork changes
+scripts/build-package.sh pipewire                # our headless forks (see below)
+scripts/build-package.sh mpv
+scripts/build-package.sh shairport-sync
+scripts/build-soloist-runtime.sh                 # glibc runtime for Spotify Soloist
+
+# Per board
+scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu
+scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min)
+scripts/build-image.sh                           # -> build/sdimage/$BOARD/
+sudo boards/$BOARD/write-sdcard.sh /dev/sdX build/sdimage/$BOARD   # erases the card
 ```
 
-Then boot with the serial console (115200 8N1), set a root password for the
-console (`passwd`, `lbu commit`), and log in with `ssh panda@panda.local`.
+Packages go to `packages/main/<arch>/`; `build-image.sh` takes our packages from
+there, and everything else from Alpine's mirrors. Without the Soloist runtime
+the image still builds, but Spotify won't work. The image never contains the
+Soloist binary or an API key: the device downloads Soloist from Spotify, and you
+enter the key on the web page.
+
+Then boot with the serial console, set a root password for the console
+(`passwd`, `lbu commit`), and log in with `ssh panda@panda.local`. SSH accepts
+the keys in `appliance/authorized_keys`, or this host's `~/.ssh/*.pub` if that
+file is missing.
+
+To update a running device without reflashing: `scripts/deploy.sh [--restart]`
+(`PANDA_HOST=user@host` if it isn't `panda@panda.local`).
 
 Wi-Fi out of the box: put `appliance/wifi.json` (not in git) before building,
 or drop one onto the card's boot partition (imported at boot, then deleted):
@@ -31,15 +65,6 @@ or drop one onto the card's boot partition (imported at boot, then deleted):
 ```
 
 Otherwise boot with Ethernet and pick a network on the web page (Network).
-
-Other boards: `BOARD=<name>` selects `boards/<name>/` (default `pandaboard`), e.g.
-
-```sh
-BOARD=beaglexm scripts/build-u-boot.sh
-BOARD=beaglexm scripts/build-package.sh linux-beaglexm
-BOARD=beaglexm scripts/build-image.sh
-sudo boards/beaglexm/write-sdcard.sh /dev/sdX build/sdimage/beaglexm
-```
 
 A board directory needs a
 `board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile

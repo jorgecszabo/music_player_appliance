@@ -42,7 +42,10 @@ profile_pcduino() {
 	initfs_features="base mmc squashfs usb"
 	# No "quiet": the boot log on serial is the main debugging tool.
 	initfs_cmdline="modules=loop,squashfs,sd-mod,usb-storage"
-	kernel_cmdline="console=$CONSOLE"
+	# HDMI (tty0) as well as serial, and last, so OpenRC's output goes there too
+	# (the last console= is /dev/console): the pcDuino is brought up without a
+	# serial adapter. consoleblank=0: the last messages stay on screen.
+	kernel_cmdline="console=$CONSOLE console=tty0 consoleblank=0"
 	modloopfw="$MODLOOP_EXTRA_FIRMWARE"
 	pcduino_extlinux=yes
 	# U-Boot + extlinux boot; no GRUB/EFI (profile_base enables it for ARM).

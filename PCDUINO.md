@@ -146,12 +146,18 @@ point the boot reached.
 
 These can't be done unattended: they need the card, serial wiring, a USB DAC and ears.
 
-- **B1. First boot.** Write the card (`sudo boards/pcduino/write-sdcard.sh /dev/sdX
-  build/sdimage/pcduino`, or `--image card.img` and one `dd`). Serial adapter on the debug
-  UART header (3.3 V), 115200 8N1. Check: the SPL reports 512 MiB; U-Boot finds a MAC
-  address (from the SID; QEMU has none); boot to SSH over Ethernet; `dmesg | grep crng`
-  (24 s in QEMU, which doesn't block the boot, but real timing differs); a stable MAC
-  across reboots.
+- **B1. First boot (no serial adapter).** Write the card (`sudo boards/pcduino/write-sdcard.sh
+  /dev/sdX build/sdimage/pcduino`, or `--image card.img` and one `dd`). Plug in Ethernet and
+  an HDMI monitor/TV *before* power-on (U-Boot only sets up HDMI if a monitor is there).
+  On screen: U-Boot (including "DRAM: 512 MiB"), then the kernel and OpenRC messages (the
+  kernel has simplefb + fbcon; `console=tty0` is the last console, so OpenRC writes there).
+  Then over the network: `ssh panda@panda.local` (or the address from the router's DHCP
+  list). Over SSH: U-Boot found a MAC address (from the SID; QEMU has none) and it's stable
+  across reboots; `dmesg | grep crng` (24 s in QEMU, which doesn't block the boot; real timing
+  differs); `dmesg | grep simplefb`.
+  If the screen stays black and there's no SSH: the boot ROM didn't find the SPL, or U-Boot
+  saw no monitor. Then a 3.3 V USB-TTL adapter (CP2102/CH340/FTDI) on the debug header is the
+  way in. **Not the Panda/xM's DB9 cable**: that's RS-232 (±12 V), and it can damage the A10.
 - **B2. Buttons.** Check whether the Back/Home/Menu buttons are fitted (look, or
   `evtest`/`cat /sys/kernel/debug/gpio` with and without pressing). If they are: set
   `BUTTON_INPUT_NAME=gpio-keys`, `BUTTON_KEY=KEY_HOME`. If not: a device tree overlay or patch
@@ -228,6 +234,13 @@ These can't be done unattended: they need the card, serial wiring, a USB DAC and
   audio, BT, the watchdog reset, or timing.
 - **No change to the other boards**: the xM image rebuilt after all this is identical except
   for version stamps (same files and packages, byte-identical kernel, modloop and DTBs).
+- **No serial adapter for this board** (2026-11-05): HDMI boot console added
+  (`linux-pcduino` r2: `FB_SIMPLE` on U-Boot's simple-framebuffer, fbcon; cmdline
+  `console=ttyS0,115200n8 console=tty0 consoleblank=0`, tty0 last so OpenRC writes there; a
+  serial adapter, if one is used later, then gets only the kernel's messages). r2 checked in
+  QEMU: boots to login, Ethernet up, all services except Soloist, OTA booted=confirmed=a. QEMU
+  has no HDMI, so the screen output itself is untested. First test planned: Ethernet only,
+  then the living room TV if SSH doesn't come up.
 - Seen and left alone: the DT reserves 96 MiB of CMA (for display/video, below 256 MiB).
   It's reusable (movable pages use it), so it's not lost; trim it only if B4 shows memory
   pressure. `sysctl: kernel.unprivileged_bpf_disabled unknown`: same on the xM (no BPF syscall

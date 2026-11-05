@@ -14,7 +14,7 @@
 _flavor=pcduino
 pkgname=linux-$_flavor
 pkgver=6.18.60
-pkgrel=1
+pkgrel=2
 pkgdesc="Linux LTS kernel for the pcDuino Lite (Allwinner A10)"
 url="https://www.kernel.org"
 arch="armv7"
@@ -51,5 +51,5 @@ package() {
 }
 
 sha512sums="
-5d2a055fb0ee0aae76c3c3f9458148b6451eed9ac1f939add7ba350723a04cc358f99709ae8a47678e945724a3dfba1bfecba9cb5df9719043dd7ead9d97a4f5  pcduino.config
+8c9cc35a4f185c3576915b45e6178e4251cd36da6450eafdbfd96d042b13fb64c243dbd08887e5f4f3c6e24743c3a4f77d577540955a23379e578f1a1b9aaaa3  pcduino.config
 "

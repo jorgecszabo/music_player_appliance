@@ -278,3 +278,14 @@ says "hold S2" on every board.
   container (gcc defaults `-march=armv6kz+fp -mfpu=vfpv2`). Building: the forks for armhf.
   Side effect found: building the armhf container re-tags podman's local `alpine:3.24` as
   arm/v6; pulled amd64 back (`podman pull --platform linux/amd64 docker.io/library/alpine:3.24`).
+- 2026-11-05: built for armhf: pipewire, mpv, shairport-sync (forks), panda-spectrum (check()
+  passed: self-test, no float instructions; a float kissfft build has 108, so the check
+  bites). Image built (141 MB): firmware, config.txt, both overlays, the B rev 2 DTB, extlinux
+  without FDT, our forks and the panel's packages in slot a, no Soloist.
+- 2026-11-05: QEMU (`scripts/qemu-rpi1.sh`, raspi1ap): U-Boot starts with the firmware-style
+  DTB, reads our extlinux, boots linux-rpi; the initramfs mounts the card, loads the apkovl and
+  installs the packages from the slot. Not seen: OpenRC (it prints to tty1, the TFT) and
+  networking (the overlay only configures eth0; QEMU's usb-net is usb0). QEMU-only DTB changes
+  in the script: SD on sdhci instead of sdhost (with mmc0 only), PM block disabled (QEMU lacks
+  its power-domain registers: bcm2835-power oopses), and u-boot.bin wrapped in a uImage header
+  (QEMU loads raw images at 0x10000, the firmware at 0x8000). Next: a real card (B2).

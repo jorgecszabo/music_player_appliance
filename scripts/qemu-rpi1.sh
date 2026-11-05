@@ -30,18 +30,32 @@ if [ -z "${KEEP:-}" ] || [ ! -f "$OUT/card.img" ]; then
     "$BOARD_DIR/write-sdcard.sh" --image "$OUT/card.img" "$SD" >/dev/null
     truncate -s 1G "$OUT/card.img"
 fi
-cp "$PROJECT_DIR/build/u-boot-out/$BOARD/u-boot.bin" "$OUT/u-boot.bin"
+# QEMU loads a raw -kernel image at 0x10000, the firmware puts u-boot.bin at
+# 0x8000 (its link address): a uImage header tells QEMU where it goes.
+UB="$PROJECT_DIR/build/u-boot-out/$BOARD"
+"$UB/tools/mkimage" -q -A arm -O linux -T kernel -C none -a 0x8000 -e 0x8000 -n u-boot \
+    -d "$UB/u-boot.bin" "$OUT/u-boot.uimg"
 # The firmware's part: the Model B rev 2 DTB with config.txt's overlays.
 overlays=$(sed -n 's/^dtoverlay=\([^,]*\).*/\1/p' "$SD/config.txt")
 args=()
 for o in $overlays; do args+=("/sd/overlays/$o.dtbo"); done
 podman run --rm -v "$SD:/sd:ro,z" -v "$OUT:/q:z" "$IMAGE" \
     fdtoverlay -i /sd/bcm2708-rpi-b.dtb -o /q/rpi.dtb "${args[@]}"
-echo "device tree: bcm2708-rpi-b.dtb + $overlays"
+# QEMU wires its SD card to the SoC's other controller (sdhci at 0x7e300000), the
+# Model B's tree enables sdhost (0x7e202000): swap them in QEMU's copy only.
+podman run --rm -v "$OUT:/q:z" "$IMAGE" sh -euc '
+    fdtput -t s /q/rpi.dtb /soc/mmc@7e202000 status disabled
+    fdtput -t s /q/rpi.dtb /soc/mmc@7e300000 status okay
+    fdtput -t s /q/rpi.dtb /aliases mmc0 /soc/mmc@7e300000
+    fdtput -d /q/rpi.dtb /aliases mmc1      # also names sdhci: the card would be mmcblk1
+    # QEMU has no PM block power-domain registers: bcm2835-power oopses and the
+    # boot stalls. Without it: no watchdog in QEMU either.
+    fdtput -t s /q/rpi.dtb /soc/watchdog@7e100000 status disabled'
+echo "device tree: bcm2708-rpi-b.dtb + $overlays (QEMU: SD on sdhci, no PM block)"
 
 rm -f "$OUT/boot.log"
 run=(qemu-system-arm -M raspi1ap -m 512
-     -kernel /q/u-boot.bin -dtb /q/rpi.dtb
+     -kernel /q/u-boot.uimg -dtb /q/rpi.dtb
      -drive if=sd,format=raw,file=/q/card.img
      -device usb-net,netdev=n
      -netdev user,id=n,hostfwd=tcp:0.0.0.0:2222-:22,hostfwd=tcp:0.0.0.0:8080-:80)

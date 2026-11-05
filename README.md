@@ -29,7 +29,8 @@ so set it once for the whole build:
 ```sh
 export BOARD=beaglexm                            # or pandaboard
 
-# Once per host (the container is per Alpine arch)
+# Once per host (the container is per Alpine arch); redo build-container.sh after
+# clearing podman's storage (e.g. podman system reset); keys/ and packages/ survive
 scripts/build-container.sh                       # target-arch Alpine build container
 scripts/setup-keys.sh                            # abuild signing key (back up keys/*.rsa)
 
@@ -82,6 +83,9 @@ that isn't running; the other one stays untouched. Design: PLAN.md, "OTA updates
 ```sh
 scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
 ```
+
+It needs the build container (`scripts/build-container.sh`) and the packages from
+"Build an image" above.
 
 Install it on the web page (System Update: Browse..., Install, restart), or over SSH:
 

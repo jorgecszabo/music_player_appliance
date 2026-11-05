@@ -13,7 +13,7 @@
 _flavor=pandaboard
 pkgname=linux-$_flavor
 pkgver=6.18.60
-pkgrel=8
+pkgrel=9
 pkgdesc="Linux LTS kernel for the PandaBoard (OMAP4430)"
 url="https://www.kernel.org"
 arch="armv7"

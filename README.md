@@ -31,12 +31,15 @@ AirPlay, Bluetooth and internet radio. It's published as is:
 | `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 (Wi-Fi doesn't connect yet), or USB |
 | `beaglexm` | BeagleBoard-xM | DM3730 (OMAP3), armv7 | `linux-beaglexm` | TWL4030 3.5 mm jack (48 kHz), or USB audio | none onboard: USB dongles |
 | `pcduino` | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
+| `rpi1` (bring-up, untested) | Raspberry Pi 1 Model B rev 2 + 2.8" TFT | BCM2835 (ARM1176, 1 GHz OC), **armhf** | Alpine's `linux-rpi` | PWM 3.5 mm jack, or USB audio | none onboard: USB dongles; no Spotify (ARMv6) |
 
 All boot from an SD card through U-Boot v2024.07. The OMAP boards use MLO +
 `u-boot.img` and a serial console on `ttyS2`; the pcDuino uses
-`u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0` (the debug header). All
-at 115200 8N1. Each board's `board.conf` describes its hardware in detail; the
-pcDuino's bring-up status is in [PCDUINO.md](PCDUINO.md). To add a board, see [Porting](#porting-the-appliance-to-another-board).
+`u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0` (the debug header); the
+Pi's GPU firmware starts `u-boot.bin` from the FAT partition (`config.txt`),
+console `ttyAMA0`. All at 115200 8N1. Each board's `board.conf` describes its
+hardware in detail; the pcDuino's bring-up status is in [PCDUINO.md](PCDUINO.md),
+the Pi's (and its Win98-style front panel, `panda-lcd`) in [RPI1.md](RPI1.md). To add a board, see [Porting](#porting-the-appliance-to-another-board).
 
 ## Build an image (Fedora host, rootless podman)
 
@@ -51,15 +54,18 @@ export BOARD=beaglexm                            # or pandaboard
 scripts/build-container.sh                       # target-arch Alpine build container
 scripts/setup-keys.sh                            # abuild signing key (back up keys/*.rsa)
 
-# Once per Alpine arch (armv7 is shared by both boards), and again when a fork changes
+# Once per Alpine arch (armv7 is shared by three boards; rpi1 is armhf), and again
+# when a fork changes
 scripts/build-package.sh pipewire                # our headless forks (see below)
 scripts/build-package.sh mpv
 scripts/build-package.sh shairport-sync
-scripts/build-soloist-runtime.sh                 # glibc runtime for Spotify Soloist
+scripts/build-soloist-runtime.sh                 # glibc runtime for Spotify Soloist (not armhf)
+scripts/build-package.sh panda-spectrum          # front panel spectrum (boards with LCD_FB)
 
 # Per board
 scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu
-scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min)
+scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min; not
+                                                 #   rpi1: it uses Alpine's linux-rpi)
 scripts/build-image.sh                           # -> build/sdimage/$BOARD/
 sudo boards/$BOARD/write-sdcard.sh /dev/sdX build/sdimage/$BOARD   # erases the card
 # (pcduino also: boards/pcduino/write-sdcard.sh --image card.img build/sdimage/pcduino,
@@ -68,7 +74,8 @@ sudo boards/$BOARD/write-sdcard.sh /dev/sdX build/sdimage/$BOARD   # erases the 
 
 Packages go to `packages/main/<arch>/`; `build-image.sh` takes our packages from
 there, and everything else from Alpine's mirrors. Without the Soloist runtime
-the image still builds, but Spotify won't work. The image never contains the
+the image still builds, but Spotify won't work. A board with `SPOTIFY=no` in
+board.conf (rpi1: Soloist is ARMv7 and up) leaves Spotify out entirely. The image never contains the
 Soloist binary or an API key: the device downloads Soloist from Spotify, and you
 enter the key on the web page.
 
@@ -177,7 +184,7 @@ Steps:
    the watchdog, the BT controller (or `btusb`), gpio-keys for the
    button, `nf_tables`, and a fast entropy source (getrandom must not block at boot).
 5. Write `write-sdcard.sh` for the board's boot ROM (OMAP: `scripts/write-sdcard-omap.sh`,
-   Allwinner: `scripts/write-sdcard-sunxi.sh`), then
+   Allwinner: `scripts/write-sdcard-sunxi.sh`, Raspberry Pi 1: `scripts/write-sdcard-rpi.sh`), then
    `BOARD=<board> scripts/build-package.sh <kernel> && BOARD=<board> scripts/build-image.sh`.
 6. On the device, find the real names and put them in board.conf: `cat /proc/asound/cards`
    (AUDIO_CARD), `wpctl status` (AUDIO_PW_SINK), `amixer` (AUDIO_HW_VOLUME_*),

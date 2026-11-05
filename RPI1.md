@@ -24,6 +24,29 @@ Decided (2026-11-05):
 - No Wi-Fi dongle for now: Ethernet only, no `r92su-rpi` aport.
 - Fonts as in the mockup: Tahoma for the UI and VT323 for the green display (task 6).
 
+## Status (2026-11-05)
+
+Unattended tasks 1-8 are done and committed; the spikes and B1-B6 need the board.
+Built so far: U-Boot for rpi1 and the armhf build container; the forks and the image
+are next (see the log). Where the build differs from the plan below:
+
+- **Device tree: the firmware's, not ours.** U-Boot passes the device tree the GPU firmware
+  built (extlinux without an FDT line = `$fdt_addr`; checked in U-Boot's `boot/pxe_utils.c`),
+  so `config.txt` loads the stock `pitft28-resistive` overlay (its defaults are already
+  landscape, 32 MHz, 25 fps, with the backlight on STMPE GPIO 2) and our `panda-keys`
+  overlay (the 4 buttons as one `gpio-keys` device). No `rpi1-tft.dts`, no FDTOVERLAYS.
+  The firmware's fixups (MAC, memory) stay. DTBs, overlays and `config.txt` live in the
+  FAT root, outside the OTA slots.
+- **`gpu_mem=32`** with the full `start.elf`, not 16 and the cut-down firmware: untested with
+  the jack's VCHIQ audio. Lower it after B3 if the jack works with 16.
+- **Pairing is Just Works** (panda-bt's agent): the panel shows a countdown, not a PIN.
+- **Idle:** the screensaver and the backlight-off only start when nothing has played for
+  2 / 10 minutes; while music plays the panel stays on Now Playing.
+- **Spectrum:** `panda-spectrum` starts `pw-cat` itself and gets the rate and the sink from
+  the panel. The panel turns it off for the session if the xrun count rises while it runs.
+- **Spotify on the panel:** `/api/transport` covers radio, Bluetooth and AirPlay (toggle =
+  mute); Spotify isn't covered yet (no Spotify on this board anyway).
+
 ## What upstream already has (checked 2026-11-05)
 
 Alpine v3.24 `armhf` on the mirror has everything the appliance needs except our forks:
@@ -129,11 +152,10 @@ With `no`:
 - `config.txt` (installed on the FAT partition): `kernel=u-boot.bin`, the overclock from S1,
   `gpu_mem=16` with `start_cd.elf`/`fixup_cd.dat` (the screen is SPI, so the GPU barely needs
   memory), `enable_uart=1`, `dtparam=spi=on`.
-- `rpi1-tft.dts`: our own overlay, compiled by the build. It is `pitft28-resistive` with
-  rotation, speed and fps fixed (FDTOVERLAYS can't pass parameters), plus the 4 buttons as one
-  `gpio-keys` node: `KEY_PLAYPAUSE`, `KEY_NEXTSONG`, `KEY_VOLUMEDOWN`, `KEY_VOLUMEUP`. The
-  screen is part of this board, so it belongs in the board's device tree (no runtime
-  detection).
+- ~~`rpi1-tft.dts`~~ (done differently, see Status): the stock `pitft28-resistive` overlay
+  plus `panda-keys.dts`, the 4 buttons as one `gpio-keys` node: `KEY_PLAYPAUSE`,
+  `KEY_NEXTSONG`, `KEY_VOLUMEDOWN`, `KEY_VOLUMEUP`. The screen is part of this board, so it
+  belongs in the board's device tree (no runtime detection).
 - U-Boot: `rpi_defconfig` plus a fragment for `CONFIG_OF_LIBFDT_OVERLAY` if it's missing.
   `scripts/build-u-boot.sh` needs an ARMv6 target (`gcc-arm-linux-gnu` handles it).
 - `write-sdcard.sh`: MBR with one FAT32 partition (`0x0c`), no raw offsets. Firmware
@@ -141,14 +163,11 @@ With `no`:
 
 ### 4. Image + OTA
 
-- extlinux labels: `FDT bcm2708-rpi-b.dtb` and `FDTOVERLAYS rpi1-tft.dtbo` from the slot's
-  `boot/`, so the device tree changes with the slot. `panda-ota.py` already parses both keys;
-  check it rewrites the overlay path per slot.
+- ~~extlinux FDT/FDTOVERLAYS from the slot~~ (see Status): no FDT line; the firmware's
+  device tree. A kernel update through OTA keeps the DTBs of the image it was written with.
 - The GPU firmware and `config.txt` stay in the FAT root, "unchanged" as MLO is on the OMAP
   boards. Overclock changes don't go through OTA.
-- Check that U-Boot keeps the firmware's fixups (memory size, Ethernet MAC) when it loads its
-  own DTB. U-Boot's `rpi` board code fixes the memory node and sets `ethaddr` from the
-  mailbox. If the MAC comes up random, set `ethaddr` in the boot script.
+- Using the firmware's device tree keeps its fixups (memory size, Ethernet MAC).
 
 ### 5. Transport controls: `/api/transport` (all boards)
 
@@ -193,7 +212,7 @@ Starts only if `LCD_FB` is set in board.conf. Everything else is generic.
   `http://panda.local/`), Bluetooth pairing, Wi-Fi lost, Shut Down, Display settings,
   screensaver, crash. The QR code comes from `py3-qrcode` if Alpine has it for armhf;
   otherwise use a vendored encoder, since the URL is fixed.
-- **Boot and shutdown.** fbcon on fb1 (`fbcon=map:10` on the kernel command line) shows the
+- **Boot and shutdown.** fbcon on fb1 (`fbcon=map:1` on the kernel command line) shows the
   kernel log as the "POST" screen. `panda-lcd` takes over when it starts. Its `stop()` draws
   "It's now safe to turn off your speaker" and leaves the backlight on. The framebuffer keeps
   the last frame after the process exits, so the message stays up after poweroff.
@@ -242,8 +261,9 @@ README's board table and build notes, PLAN.md "Still to do", and this file's log
 None open. Answered 2026-11-05: pairing from the Start menu only, offer the onboard jack, no
 Wi-Fi dongle for now, fonts as in the mockup (see "Decided").
 
-To check while building: whether panda-bt, `panda-reset-button` and the web page all cope
-with an empty `BUTTON_INPUT_NAME` (no button at all).
+Checked while building: panda-bt and `panda-reset-button` cope with an empty
+`BUTTON_INPUT_NAME` (the pcDuino runs that way). The web page's factory-reset text still
+says "hold S2" on every board.
 
 ## Log
 
@@ -251,3 +271,10 @@ with an empty `BUTTON_INPUT_NAME` (no button at all).
   `raspberrypi-bootloader`, PipeWire 1.6.8, shairport-sync 5.5.1, Pillow, kissfft).
 - 2026-11-05: open questions answered. The mockup's UI font was Microsoft Tahoma
   (msttcore on the workstation, not redistributable), so the device ships Wine's Tahoma.
+- 2026-11-05: tasks 1-8 written and committed. Checked on the workstation: shell and JS
+  syntax; `/api/transport` source choice with mocks; `panda-lcd.py --render-test` (all 18
+  screens), RGB565 packing, the calibration solver, the panel's input logic with a fake API;
+  `panda-spectrum --selftest` (x86_64). Built: U-Boot `rpi_defconfig` (ARM1176), the armhf
+  container (gcc defaults `-march=armv6kz+fp -mfpu=vfpv2`). Building: the forks for armhf.
+  Side effect found: building the armhf container re-tags podman's local `alpine:3.24` as
+  arm/v6; pulled amd64 back (`podman pull --platform linux/amd64 docker.io/library/alpine:3.24`).

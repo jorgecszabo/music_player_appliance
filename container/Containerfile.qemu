@@ -1,5 +1,7 @@
 # x86_64 Fedora with qemu-system-arm, for smoke-booting a card image without
 # hardware (scripts/qemu-pcduino.sh: QEMU's "cubieboard" machine is an
-# Allwinner A10). Nothing is installed on the host.
+# Allwinner A10; scripts/qemu-rpi1.sh: "raspi1ap" is a BCM2835, and dtc's
+# fdtoverlay applies config.txt's overlays as the Pi's GPU firmware would).
+# Nothing is installed on the host.
 FROM registry.fedoraproject.org/fedora:44
-RUN dnf -y install --setopt=install_weak_deps=False qemu-system-arm-core && dnf clean all
+RUN dnf -y install --setopt=install_weak_deps=False qemu-system-arm-core dtc && dnf clean all

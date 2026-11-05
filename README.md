@@ -167,3 +167,8 @@ Steps:
    (a quiet tone, then music: no crackle, `pw-top` shows 0 errors); AirPlay; Spotify;
    Bluetooth pairing via the button + reconnect after reboot; radio; web page; watchdog
    (`kill -STOP` the busybox watchdog: the board resets); factory reset dry run.
+
+## License
+
+GPL-2.0-only (see [LICENSE](LICENSE)), matching the kernel and the r92su driver in
+`drivers/`. The package forks in `aports/` keep their upstream projects' licenses.

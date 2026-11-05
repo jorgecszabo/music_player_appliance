@@ -701,6 +701,13 @@ panda-web streams the body into `doas web-admin.sh ota-install`; all checks run 
   Master volume (web slider) remembered: `audio.conf MASTER_VOLUME`, written 2 s after the
   slider rests and saved with lbu; restored when the tone filter starts (arbiter ->
   `audio-route.py --master`), not on hotplug.
+- [x] **Third board, pcDuino Lite** (Allwinner A10, 512 MB, USB audio only; 2026-11-05,
+  unattended, **not yet on the hardware**): `boards/pcduino/`, kernel `linux-pcduino`
+  (omap2plus as the generic baseline with the platform swapped to the A10), U-Boot
+  `Linksprite_pcDuino_defconfig` (+ a SWIG 4.3 patch for binman), Allwinner card writer with
+  a rootless image mode, and a QEMU smoke boot (`scripts/qemu-pcduino.sh`, cubieboard
+  machine): boots to login with all services, web page and OTA state working. Bring-up
+  checklist and findings: [PCDUINO.md](PCDUINO.md).
 
 ### Still to do
 
@@ -736,14 +743,16 @@ Later:
 ### Project layout
 
 ```
-boards/<board>/            everything board-specific (pandaboard, beaglexm)
+boards/<board>/            everything board-specific (pandaboard, beaglexm, pcduino)
   board.conf               hardware description: arch, kernel flavor, DTB, console,
                            boot media, audio card/rate/mixer, BT, button, LEDs.
                            Also installed on the device as /etc/panda/board.conf
   mkimg.<board>.sh         mkimage profile (reads board.conf + appliance files)
   write-sdcard.sh          SD card writer (OMAP boards: wrapper for
-                           scripts/write-sdcard-omap.sh, raw-mode U-Boot + FAT32)
-  u-boot/swap.sh           swap U-Boot on a written card
+                           scripts/write-sdcard-omap.sh, raw-mode U-Boot + FAT32;
+                           Allwinner: scripts/write-sdcard-sunxi.sh, SPL at 8 KiB)
+  u-boot/                  swap.sh (swap U-Boot on a written card), *.patch
+                           (applied by build-u-boot.sh for this board only)
   aports/<pkg>/            board packages (linux-pandaboard: APKBUILD with the
                            defconfig/fragment/DTB list, cross-build.sh wrapper,
                            pandaboard.config fragment)
@@ -759,7 +768,7 @@ container/                 Containerfile (target-arch abuild/mkimage env),
                            Containerfile.cross (x86_64 + arm-none-eabi-gcc)
 scripts/                   env.sh (BOARD selection), alpine.sh, build-container.sh,
                            setup-keys.sh, build-u-boot.sh, build-package.sh,
-                           cross-build-kernel.sh, build-image.sh, write-sdcard-omap.sh,
+                           cross-build-kernel.sh, build-image.sh, write-sdcard-{omap,sunxi}.sh,
                            update-boot-files.sh, deploy.sh (push rootfs + run setup.sh),
                            build-soloist-runtime.sh (glibc runtime squashfs), serial-sysrq.py
 build/, packages/          outputs (gitignored)

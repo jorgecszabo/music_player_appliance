@@ -13,10 +13,13 @@ See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 |---|---|---|---|---|---|
 | `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 (Wi-Fi doesn't connect yet), or USB |
 | `beaglexm` | BeagleBoard-xM | DM3730 (OMAP3), armv7 | `linux-beaglexm` | TWL4030 3.5 mm jack (48 kHz), or USB audio | none onboard: USB dongles |
+| `pcduino` (not tested on the board yet) | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
 
-Both boot from an SD card through U-Boot v2024.07 (MLO + `u-boot.img`), with a
-serial console on `ttyS2` at 115200 8N1. Each board's `board.conf` describes its
-hardware in detail. To add a board, see [Porting](#porting-the-appliance-to-another-board).
+All boot from an SD card through U-Boot v2024.07. The OMAP boards use MLO +
+`u-boot.img` and a serial console on `ttyS2`; the pcDuino uses
+`u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0` (the debug header). All
+at 115200 8N1. Each board's `board.conf` describes its hardware in detail; the
+pcDuino's bring-up status is in [PCDUINO.md](PCDUINO.md). To add a board, see [Porting](#porting-the-appliance-to-another-board).
 
 ## Build an image (Fedora host, rootless podman)
 
@@ -41,6 +44,8 @@ scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu
 scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min)
 scripts/build-image.sh                           # -> build/sdimage/$BOARD/
 sudo boards/$BOARD/write-sdcard.sh /dev/sdX build/sdimage/$BOARD   # erases the card
+# (pcduino also: boards/pcduino/write-sdcard.sh --image card.img build/sdimage/pcduino,
+#  no root, then one dd onto the card)
 ```
 
 Packages go to `packages/main/<arch>/`; `build-image.sh` takes our packages from
@@ -145,7 +150,8 @@ Steps:
    Needs: the audio codec, `SND_USB_AUDIO` (USB audio output; the kernel APKBUILDs check it),
    the watchdog, the BT controller (or `btusb`), gpio-keys for the
    button, `nf_tables`, and a fast entropy source (getrandom must not block at boot).
-5. Write `write-sdcard.sh` for the board's boot ROM, then
+5. Write `write-sdcard.sh` for the board's boot ROM (OMAP: `scripts/write-sdcard-omap.sh`,
+   Allwinner: `scripts/write-sdcard-sunxi.sh`), then
    `BOARD=<board> scripts/build-package.sh <kernel> && BOARD=<board> scripts/build-image.sh`.
 6. On the device, find the real names and put them in board.conf: `cat /proc/asound/cards`
    (AUDIO_CARD), `wpctl status` (AUDIO_PW_SINK), `amixer` (AUDIO_HW_VOLUME_*),

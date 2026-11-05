@@ -66,10 +66,11 @@ audio config looks right (no onboard sink, the first USB card used).
 
 ### 2. Kernel aport: `boards/pcduino/aports/linux-pcduino/`
 
-- Same structure as `linux-beaglexm`: `_defconfig=sunxi_defconfig`, `_fragment=pcduino.config`,
+- Same structure as `linux-beaglexm`: `_defconfig=omap2plus_defconfig` (as the generic
+  baseline, platform swapped to the A10: see the log), `_fragment=pcduino.config`,
   `_dtbs="allwinner/sun4i-a10-pcduino.dtb"`, and `_kconfig_check="CONFIG_MACH_SUN4I=y
   CONFIG_SND_USB_AUDIO=[ym]"`.
-- Fragment: what the appliance needs on top of `sunxi_defconfig`, taken from the
+- Fragment: the A10 platform and drivers, plus what the appliance needs, taken from the
   xM fragment's generic part: `SND_USB_AUDIO`, Bluetooth + `btusb` (+ BT USB audio), USB Wi-Fi
   drivers as modules, `nf_tables`, squashfs/loop for the modloop, `SUNXI_WATCHDOG`,
   `TOUCHSCREEN_SUN4I`, `USB_MUSB_SUNXI` (OTG port as a third host port), cpufreq
@@ -145,9 +146,12 @@ point the boot reached.
 
 These can't be done unattended: they need the card, serial wiring, a USB DAC and ears.
 
-- **B1. First boot.** Write the card (`sudo boards/pcduino/write-sdcard.sh /dev/sdX`, or
-  `dd` of the task 4 image). Serial adapter on the debug UART header (3.3 V), 115200 8N1.
-  Check the SPL reports 512 MiB, and boot to SSH over Ethernet.
+- **B1. First boot.** Write the card (`sudo boards/pcduino/write-sdcard.sh /dev/sdX
+  build/sdimage/pcduino`, or `--image card.img` and one `dd`). Serial adapter on the debug
+  UART header (3.3 V), 115200 8N1. Check: the SPL reports 512 MiB; U-Boot finds a MAC
+  address (from the SID; QEMU has none); boot to SSH over Ethernet; `dmesg | grep crng`
+  (24 s in QEMU, which doesn't block the boot, but real timing differs); a stable MAC
+  across reboots.
 - **B2. Buttons.** Check whether the Back/Home/Menu buttons are fitted (look, or
   `evtest`/`cat /sys/kernel/debug/gpio` with and without pressing). If they are: set
   `BUTTON_INPUT_NAME=gpio-keys`, `BUTTON_KEY=KEY_HOME`. If not: a device tree overlay or patch
@@ -158,11 +162,16 @@ These can't be done unattended: they need the card, serial wiring, a USB DAC and
 - **B4. USB audio.** Plug in the DAC; `wpctl status` for the sink. Check that the DAC's own
   mixer control works as the volume cap (only if `board.conf` gets one). Then the README's
   test checklist: tone, music, `pw-top` 0 errors, AirPlay, Spotify (CPU load on one A8 core,
-  compared with the xM), radio, Bluetooth with a USB dongle.
+  compared with the xM), radio, Bluetooth with a USB dongle. Unplug and replug the DAC
+  during playback: there's no onboard output to fall back to, so check that playback comes
+  back on the DAC when it reappears.
 - **B5. Power cut, watchdog reset (`kill -STOP` the watchdog daemon), factory reset dry run,
   and an OTA update + revert on the real card.**
 - **B6. Ports.** The DAC, a BT dongle and possibly Wi-Fi: 2 host ports plus OTG (in host mode,
-  through an adapter) or a powered hub. Check the OTG port works as a host.
+  through an adapter) or a powered hub. Check the OTG port works as a host: `dmesg | grep
+  musb` (QEMU can't tell: it has no model of the A10's OTG controller, so the driver fails
+  there reading the FIFO config), and whether the port powers a device (VBUS: the pcDuino DT
+  has no supply for it).
 
 ## Stop conditions (unattended)
 
@@ -181,4 +190,45 @@ These can't be done unattended: they need the card, serial wiring, a USB DAC and
 
 ## Log
 
-(empty)
+**2026-11-04/05, unattended: tasks 1-7 done.** Commits `26110e1`..`e9e1577` and after.
+
+- **Board directory** (`boards/pcduino/`): `board.conf` (USB audio only, button off until B2),
+  mkimage profile, card writer wrapper. The configs render: no onboard sink, USB cards enabled,
+  the tone filter routed by `audio-route.py`.
+- **Kernel** `linux-pcduino-6.18.60-r1`. Base: **`omap2plus_defconfig` with the platform
+  swapped** (all OMAPs off, `MACH_SUN4I` on), not `sunxi_defconfig`. `sunxi_defconfig` lacks
+  ~1100 generic options the xM runs with (SYSVIPC, POSIX mqueue, namespaces, cgroups,
+  netfilter, security modules). This way the generic part is the one already verified on two
+  boards, and the fragment only adds the A10 drivers. Compared with the xM's final config,
+  only SoC-specific options are missing (SATA, HDMI, OMAP sound glue). Notes:
+  `TOUCHSCREEN_SUN4I` (the temperature sensor) is a module (it needs HWMON, a module in
+  omap2plus). MUSB is dual-role: r0 was host-only and failed in QEMU with "Invalid or missing
+  'dr_mode'" (the DT says `otg`, which only a dual-role build accepts). zImage 7 MB (U-Boot
+  loads it below the DTB at +16 MB).
+- **U-Boot** `Linksprite_pcDuino_defconfig`, one patch: sunxi builds
+  `u-boot-sunxi-with-spl.bin` with binman, which needs pylibfdt, and v2024.07's SWIG wrapper
+  doesn't compile with Fedora's SWIG 4.4 (`SWIG_Python_AppendOutput` got a third argument).
+  `boards/pcduino/u-boot/0001-pylibfdt-swig-4.3.patch` uses `SWIG_AppendOutput`, as upstream
+  dtc does. OMAP builds don't use binman and don't get the patch. Checked: eGON boot header,
+  DRAM size detection, `fdtfile=sun4i-a10-pcduino.dtb`, boot order fel, mmc0, usb0, pxe, dhcp.
+- **Card writer** `scripts/write-sdcard-sunxi.sh`: the OMAP layout (DOS label, FAT32 512 MiB at
+  4 MiB), bootloader raw at 8 KiB. `--image` builds the card as a file without root
+  (sfdisk + `mkfs.vfat --offset` + mtools); read back byte-identical, table intact after the
+  bootloader write. The card mode is untested (it needs sudo and a card).
+- **Image + OTA**: 111 MB per slot (fits twice). OTA bundle builds; `test-ota.sh`: 20 passed
+  (its fake cmdline now uses the board's console).
+- **QEMU** (`scripts/qemu-pcduino.sh`, QEMU 10.2 `cubieboard` in a container): the pcDuino's own
+  SPL + U-Boot + kernel + DTB boot from the card image to a login prompt in ~4 min, first try.
+  Up: modloop, OpenRC, all appliance services except Soloist (no API key, as expected),
+  firewall, Ethernet (100 Mbit/s, DHCP), chrony synced, the web page (HTTP 200, `/api/status`
+  shows the board, 503 MB RAM with 267 MB available, the tone sink, OTA booted=confirmed=a),
+  sshd (accepts the owner's keys; the session itself wasn't tested because the keys have
+  passphrases). `gpio-keys` is the input device's name, as derived. No conclusions from QEMU
+  about the temperature (QEMU has no touchscreen/sensor block: `temp` is null), the OTG port,
+  audio, BT, the watchdog reset, or timing.
+- **No change to the other boards**: the xM image rebuilt after all this is identical except
+  for version stamps (same files and packages, byte-identical kernel, modloop and DTBs).
+- Seen and left alone: the DT reserves 96 MiB of CMA (for display/video, below 256 MiB).
+  It's reusable (movable pages use it), so it's not lost; trim it only if B4 shows memory
+  pressure. `sysctl: kernel.unprivileged_bpf_disabled unknown`: same on the xM (no BPF syscall
+  in the baseline).

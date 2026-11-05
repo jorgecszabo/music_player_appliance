@@ -13,7 +13,7 @@
 _flavor=pandaboard
 pkgname=linux-$_flavor
 pkgver=6.18.60
-pkgrel=4
+pkgrel=5
 pkgdesc="Linux LTS kernel for the PandaBoard (OMAP4430)"
 url="https://www.kernel.org"
 arch="armv7"
@@ -26,6 +26,9 @@ source="pandaboard.config"
 _defconfig=omap2plus_defconfig
 _fragment=pandaboard.config
 _dtbs="ti/omap/omap4-panda*.dtb"
+# Out-of-tree modules: r92su (RTL8188SU/8191SU/8192SU USB Wi-Fi, no mainline
+# driver since r8712u left staging; see drivers/r92su/PORTING.md).
+_extmods="drivers/r92su"
 # The staged config must have this (catches a wrong or stale staging dir).
 # Required options (grep -xE patterns): the SoC, and USB audio (the appliance's
 # alternative output, audio-route.py).
@@ -49,5 +52,5 @@ package() {
 }
 
 sha512sums="
-be0d7f0d7cc54865fcc10c75bf2bde3733050c5c2440e0d11150e08f6453ece8134def0e8bc910a75ae23cf8626e9fc2a3be6bb33670c42fe608ad4353025218  pandaboard.config
+4c33e4fa897bb2442f25d45d501935f0b512d584d75b5e19c8674df2de167c4f82fb96f167a824ebb4cc6a32f9a8258676468ee7aeecf6b761e0dee8fff48083  pandaboard.config
 "

@@ -16,6 +16,9 @@
 #   _defconfig       base config, e.g. omap2plus_defconfig
 #   _fragment        config fragment in the aport dir, merged over the defconfig
 #   _dtbs            DTB globs relative to arch/arm/boot/dts/
+#   _extmods         optional: out-of-tree module dirs (project-relative, each
+#                    with a Kbuild), built against this kernel and installed
+#                    in lib/modules/<release>/updates/
 # ARM (zImage) only so far.
 set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,6 +49,7 @@ _flavor=$(apkvar _flavor)
 _defconfig=$(apkvar _defconfig)
 _fragment=$(apkvar _fragment)
 _dtbs=$(apkvar _dtbs)
+_extmods=$(sed -n 's/^_extmods=//p' "$APORT_DIR/APKBUILD" | tr -d '"')
 SRC=/work/build/src/linux-$pkgver
 OUT=/work/build/kcross-out/$_flavor
 STAGE=/work/build/kernel-staging/$_flavor
@@ -83,6 +87,13 @@ while IFS= read -r l; do
 done < "$APORT_DIR/$_fragment"
 [ "$bad" = 0 ] || { echo "fix $APORT_REL/$_fragment" >&2; exit 1; }
 make -C "$OUT" -j"$(nproc)" KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine" zImage modules dtbs
+# External modules build in a copy, so the objects stay out of the source dir.
+for m in $_extmods; do
+    [ -f "/work/$m/Kbuild" ] || { echo "_extmods: /work/$m/Kbuild missing" >&2; exit 1; }
+    rm -rf "$OUT/extmod/${m##*/}" && mkdir -p "$OUT/extmod"
+    cp -r "/work/$m" "$OUT/extmod/${m##*/}"
+    make -C "$OUT" -j"$(nproc)" M="$OUT/extmod/${m##*/}" modules
+done
 
 rel=$(make -C "$OUT" -s kernelrelease)
 [ "$rel" = "$pkgver-$pkgrel-$_flavor" ] || { echo "unexpected kernel release $rel"; exit 1; }
@@ -100,6 +111,10 @@ for pat in $_dtbs; do
     done
 done
 make -C "$OUT" -s modules_install INSTALL_MOD_PATH="$STAGE" INSTALL_MOD_STRIP=1
+for m in $_extmods; do
+    make -C "$OUT" -s M="$OUT/extmod/${m##*/}" modules_install \
+        INSTALL_MOD_PATH="$STAGE" INSTALL_MOD_STRIP=1
+done
 rm -f "$STAGE"/lib/modules/"$rel"/build "$STAGE"/lib/modules/"$rel"/source
 install -Dm644 "$OUT"/include/config/kernel.release "$STAGE"/usr/share/kernel/$_flavor/kernel.release
 echo "staged $rel ($n DTBs) in build/kernel-staging/$_flavor"

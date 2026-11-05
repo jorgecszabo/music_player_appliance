@@ -7,6 +7,23 @@ board-independent.
 
 See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 
+## Status and support
+
+A hobby project to give obsolete dev boards a second life. It works for me: it
+plays Spotify, AirPlay, Bluetooth and internet radio daily on a PandaBoard with a
+USB Wi-Fi dongle. It's published as is:
+
+- **No support promised.** Issues and patches get read eventually, but there's no
+  roadmap and no guaranteed answer. Requests to support another board are best
+  sent as a port (see [Porting](#porting-the-appliance-to-another-board)).
+- **Rough edges are known and listed** in PLAN.md ("Still to do"). Among them: the
+  PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet (use Ethernet or a USB
+  dongle), and the pcDuino port hasn't been tested on a real board.
+- **How it was made:** much of the code, including the r92su Wi-Fi driver port in
+  `drivers/`, was written with an AI assistant (Claude) and tested on the boards,
+  but not reviewed line by line. Board-specific code aims for "works in
+  practice", not for every edge case.
+
 ## Supported boards
 
 | `BOARD=` | Board | SoC / Alpine arch | Kernel package | Audio out | Wi-Fi / Bluetooth |

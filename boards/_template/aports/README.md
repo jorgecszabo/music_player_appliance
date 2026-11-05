@@ -8,7 +8,8 @@ the APKBUILD sets `_flavor`, `_defconfig`, `_fragment`, `_dtbs` and
 `_kconfig_check`, and its `cross-build.sh` hands the aport to
 `scripts/cross-build-kernel.sh`, which builds into `build/kernel-staging/<flavor>/`.
 It also builds the generic out-of-tree drivers in `drivers/` (`DEFAULT_EXTMODS`
-in that script; today `r92su`, USB Wi-Fi) for the kernel; each one's
+in that script; today `r92su`, USB Wi-Fi, a git submodule of
+github.com/jorgecszabo/rtl8192su) for the kernel; each one's
 `kconfig.require` lists the options the fragment must enable. Set
 `_extmods_skip="drivers/<name>"` in the APKBUILD to leave one out, and
 `_extmods="drivers/<name>"` to add a driver only this board uses. Alpine's stock

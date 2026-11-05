@@ -26,6 +26,7 @@
 set -euo pipefail
 # Generic out-of-tree drivers (USB peripherals, not board hardware), built for
 # every board kernel unless its APKBUILD lists them in _extmods_skip.
+# drivers/r92su is a git submodule (github.com/jorgecszabo/rtl8192su).
 DEFAULT_EXTMODS="drivers/r92su"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APORT_DIR="$(cd "${1:?usage: $0 <aport dir>}" && pwd)"
@@ -64,7 +65,7 @@ done
 _extmods=""
 for m in $DEFAULT_EXTMODS $_extmods_extra; do
     case " $_extmods_skip $_extmods " in *" $m "*) continue ;; esac
-    [ -f "/work/$m/Kbuild" ] || { echo "extmod $m: /work/$m/Kbuild missing" >&2; exit 1; }
+    [ -f "/work/$m/Kbuild" ] || { echo "extmod $m: /work/$m/Kbuild missing (git submodule update --init?)" >&2; exit 1; }
     _extmods="$_extmods $m"
 done
 SRC=/work/build/src/linux-$pkgver

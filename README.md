@@ -19,8 +19,8 @@ AirPlay, Bluetooth and internet radio. It's published as is:
 - **Rough edges are known and listed** in PLAN.md ("Still to do"). Among them: the
   PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet (use Ethernet or a USB
   dongle).
-- **How it was made:** much of the code, including the r92su Wi-Fi driver port in
-  `drivers/`, was written with an AI assistant (Claude) and tested on the boards,
+- **How it was made:** much of the code, including the r92su Wi-Fi driver port
+  ([rtl8192su](https://github.com/jorgecszabo/rtl8192su), in `drivers/`), was written with an AI assistant (Claude) and tested on the boards,
   but not reviewed line by line. Board-specific code aims for "works in
   practice", not for every edge case.
 
@@ -92,7 +92,9 @@ and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
 `scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
 That script also builds the generic out-of-tree drivers in `drivers/` (r92su:
 RTL8188SU/8191SU/8192SU USB Wi-Fi) for every board kernel; see
-`boards/_template/aports/README.md`.
+`boards/_template/aports/README.md`. `drivers/r92su` is a git submodule of
+[jorgecszabo/rtl8192su](https://github.com/jorgecszabo/rtl8192su): clone with
+`--recurse-submodules`, or run `git submodule update --init`.
 
 ## Updates (OTA)
 
@@ -187,5 +189,5 @@ Steps:
 
 ## License
 
-GPL-2.0-only (see [LICENSE](LICENSE)), matching the kernel and the r92su driver in
-`drivers/`. The package forks in `aports/` keep their upstream projects' licenses.
+GPL-2.0-only (see [LICENSE](LICENSE)), matching the kernel and the r92su driver
+(`drivers/r92su`, a submodule). The package forks in `aports/` keep their upstream projects' licenses.

@@ -6,6 +6,7 @@
 #   web-admin.sh restart <service>   restart one appliance service
 #   web-admin.sh restart-audio       restart the whole audio stack in order
 #   web-admin.sh reboot
+#   web-admin.sh poweroff            halt (the front panel's Shut Down)
 #   web-admin.sh save                lbu commit (save the config to the card)
 #   web-admin.sh lbu-status          unsaved changes (lbu status)
 #   web-admin.sh chrony              time sync status
@@ -61,6 +62,9 @@ restart-audio-now)
 reboot)
 	logger -t panda-web "reboot requested from the web page"
 	bg sh -c 'sleep 1; reboot' ;;
+poweroff)
+	logger -t panda-web "shutdown requested"
+	bg sh -c 'sleep 1; poweroff' ;;
 save)
 	flock /run/panda/media.lock lbu commit && echo saved ;;
 lbu-status)

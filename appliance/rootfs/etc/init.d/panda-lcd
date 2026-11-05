@@ -1,0 +1,51 @@
+#!/sbin/openrc-run
+# Front panel on a small TFT (user panda-lcd), /etc/panda/panda-lcd.py. Only on
+# boards whose board.conf sets LCD_FB. Root parts here: the text console leaves
+# the panel's framebuffer (it shows the boot log until now), and the backlight
+# becomes writable for the panel user. At shutdown the panel draws its last
+# screen ("safe to turn off", "restarting") from /run/panda-lcd/final.
+
+description="Front panel (user panda-lcd)"
+supervisor=supervise-daemon
+command=/usr/bin/python3
+command_args="/etc/panda/panda-lcd.py"
+command_user="panda-lcd:panda-lcd"
+directory=/var/lib/panda-lcd
+output_log=/var/log/panda-lcd.log
+error_log=/var/log/panda-lcd.log
+respawn_delay=3
+respawn_max=0
+
+depend() {
+	need localmount
+	after panda-web
+}
+
+start_pre() {
+	. /etc/panda/board.conf
+	[ -n "${LCD_FB:-}" ] || { eerror "no LCD_FB in board.conf: no front panel on this board"; return 1; }
+	checkpath --directory --owner panda-lcd:panda-lcd --mode 0750 /var/lib/panda-lcd
+	checkpath --directory --owner panda-lcd:panda-lcd --mode 0755 /run/panda-lcd
+	checkpath --file --owner panda-lcd:panda-lcd --mode 0640 /var/log/panda-lcd.log
+	rm -f /run/panda-lcd/final
+	# The framebuffer console (fbcon) off the panel: both would draw on it.
+	local vt
+	for vt in /sys/class/vtconsole/vtcon*; do
+		grep -q "frame buffer" "$vt/name" 2>/dev/null && echo 0 > "$vt/bind" 2>/dev/null
+	done
+	if [ -n "${LCD_BACKLIGHT:-}" ] && [ -d /sys/class/backlight/"$LCD_BACKLIGHT" ]; then
+		chown panda-lcd /sys/class/backlight/"$LCD_BACKLIGHT"/brightness \
+			/sys/class/backlight/"$LCD_BACKLIGHT"/bl_power 2>/dev/null
+	fi
+	return 0
+}
+
+stop_pre() {
+	# The last screen: OpenRC names the runlevel it's going to.
+	case "${RC_RUNLEVEL:-}" in
+		shutdown) echo off > /run/panda-lcd/final ;;
+		reboot)   echo reboot > /run/panda-lcd/final ;;
+		*)        rm -f /run/panda-lcd/final ;;
+	esac
+	return 0
+}

@@ -26,7 +26,7 @@ options="!check !strip"
 
 package() {
 	mkdir -p "$pkgdir"
-	tar -C "$_src"/appliance/rootfs --exclude=__pycache__ --exclude="*.pyc" -cf - etc | tar -C "$pkgdir" -xf -
+	tar -C "$_src"/appliance/rootfs --exclude=__pycache__ --exclude="*.pyc" -cf - etc usr | tar -C "$pkgdir" -xf -
 	# setup.sh's old one-shot role is gone; panda-setup runs it at every boot.
 	install -Dm644 "$_src"/build/panda-appliance.version "$pkgdir"/etc/panda/version
 	# Public keys that may sign OTA bundles (scripts/build-ota.sh signs with the abuild key).

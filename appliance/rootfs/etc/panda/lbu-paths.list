@@ -2,6 +2,7 @@
 # /etc/apk/protected_paths.d/panda.list: settings are saved, generated configs are not.
 +var/lib/bluetooth
 +var/lib/panda-web/radio-favorites.json
++var/lib/panda-lcd/calibration.json
 -etc/pipewire/pipewire.conf.d/10-panda.conf
 -etc/pipewire/pipewire.conf.d/20-panda-tone.conf
 -etc/wireplumber/wireplumber.conf.d/10-panda.conf

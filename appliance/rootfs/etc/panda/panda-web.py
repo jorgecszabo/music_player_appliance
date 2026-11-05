@@ -13,7 +13,7 @@ firewall redirects port 80 to it. LAN only (firewall).
   POST /api/bt               {"cmd": "pair", "open": bool} | {"cmd": "forget", "path"}
                              | {"cmd": "forget-all"}       (panda-bt control socket)
   POST /api/service          {"name": <service>} | {"name": "audio"}
-  POST /api/system           {"action": "save" | "reboot"}
+  POST /api/system           {"action": "save" | "reboot" | "poweroff"}
   POST /api/name             {"name": <speaker name>}
   POST /api/spotify-key      {"key": <new API key>}  (write-only: never returned or logged)
   POST /api/audio            {"bass": dB, "treble": dB, "cap": step, "output": "onboard"|"usb",
@@ -1124,8 +1124,8 @@ class Handler(BaseHTTPRequestHandler):
             out = run(ADMIN + ["save"], timeout=60)
             COLLECTOR.refresh("lbu")
             return {"ok": "saved" in out}
-        if action == "reboot":
-            run(ADMIN + ["reboot"])
+        if action in ("reboot", "poweroff"):
+            run(ADMIN + [action])
             return {"ok": True}
         if action == "factory-reset-check":
             return {"ok": True, "result": run(ADMIN + ["factory-reset-dry"]).strip()}

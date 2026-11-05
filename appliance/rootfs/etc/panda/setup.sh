@@ -59,6 +59,18 @@ if ! id panda-web >/dev/null 2>&1; then
 fi
 addgroup panda-web speaker 2>/dev/null || true
 chown panda-web:panda-web /var/lib/panda-web
+# Front panel (board.conf LCD_FB): framebuffer, buttons and touch, PipeWire for
+# the spectrum. Its calibration is saved (panda.list).
+if [ -n "${LCD_FB:-}" ]; then
+	if ! id panda-lcd >/dev/null 2>&1; then
+		log "creating system user panda-lcd"
+		addgroup -S panda-lcd
+		adduser -S -D -H -h /var/lib/panda-lcd -s /sbin/nologin -G panda-lcd -g "Front panel" panda-lcd
+	fi
+	for g in video input speaker; do addgroup panda-lcd "$g" 2>/dev/null || true; done
+	mkdir -p /var/lib/panda-lcd
+	chown panda-lcd:panda-lcd /var/lib/panda-lcd
+fi
 
 # --- Tone, headroom and volume cap (/etc/panda/audio.conf, the owner's settings) ---
 # Created with defaults once; the web page changes it (web-admin.sh set-audio).
@@ -156,6 +168,11 @@ for svc in panda-audio-init speaker-pipewire speaker-wireplumber $soloist \
 	panda-wifi panda-chime-boot panda-web panda-ota-confirm crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true
 done
+if [ -n "${LCD_FB:-}" ]; then
+	rc-update add panda-lcd default >/dev/null 2>&1 || true
+else
+	rc-update del panda-lcd default >/dev/null 2>&1 || true
+fi
 if [ -z "$BOOT" ]; then
 	sysctl -q -p /etc/sysctl.d/90-panda.conf || true
 	rc-service panda-firewall restart >/dev/null 2>&1 || log "WARNING: firewall failed to load"

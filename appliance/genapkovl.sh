@@ -155,6 +155,7 @@ for s in panda-audio-init speaker-pipewire speaker-wireplumber $soloist \
 	panda-wifi panda-chime-boot panda-web panda-ota-confirm; do
 	rc_add "$s" default
 done
+[ -z "${LCD_FB:-}" ] || rc_add panda-lcd default
 
 rc_add mount-ro shutdown
 rc_add killprocs shutdown

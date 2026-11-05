@@ -1,0 +1,12 @@
+Fonts for the front panel (panda-lcd), drawn without antialiasing.
+
+tahoma.ttf, tahomabd.ttf
+    Wine's Tahoma (Regular, Bold), from https://gitlab.winehq.org/wine/wine
+    (fonts/, fetched 2026-11-05). Made to match Microsoft Tahoma's metrics and
+    look, with bitmap strikes for small sizes. Copyright (c) 1993-2026 the Wine
+    project authors. LGPL 2.1 or later: COPYING.LIB. Sources: fonts/tahoma.sfd
+    and fonts/tahomabd.sfd in the Wine repository.
+
+VT323-Regular.ttf
+    VT323 by Peter Hull, from https://github.com/google/fonts (ofl/vt323,
+    fetched 2026-11-05). SIL Open Font License 1.1: OFL.txt.

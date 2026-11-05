@@ -118,7 +118,9 @@ make -C "$OUT" -j"$(nproc)" KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine" zImage
 for m in $_extmods; do
     rm -rf "$OUT/extmod/${m##*/}" && mkdir -p "$OUT/extmod"
     cp -r "/work/$m" "$OUT/extmod/${m##*/}"
-    make -C "$OUT" -j"$(nproc)" M="$OUT/extmod/${m##*/}" modules
+    # R92SU_WERROR=1: warnings fail the build here (r92su only turns -Werror on
+    # when asked, so DKMS builds elsewhere survive new compilers).
+    make -C "$OUT" -j"$(nproc)" M="$OUT/extmod/${m##*/}" R92SU_WERROR=1 modules
 done
 
 rel=$(make -C "$OUT" -s kernelrelease)

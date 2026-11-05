@@ -349,6 +349,7 @@ table.props td { padding: 4px 0; overflow-wrap: anywhere; }
 .lcd-row + .lcd-row { margin-top: 6px; }
 .lcd-state { width: 16px; text-align: center; }
 .lcd-time { font-size: 26px; letter-spacing: 2px; min-width: 88px; }
+.lcd-time.paused { animation: blink 1s steps(1) infinite; }  /* Winamp's paused time */
 .lcd-title-box { flex: 1; overflow: hidden; white-space: nowrap; min-width: 0; }
 .lcd-title { display: inline-block; }
 .lcd-title.scrolling { padding-left: 100%; animation: scroll 14s linear infinite; }
@@ -482,7 +483,7 @@ tr.playing .st-dim { color: #ccc; }
 .dialog-body p { margin: 4px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ticker-track, .lcd-title.scrolling, .new { animation: none; }
+  .ticker-track, .lcd-title.scrolling, .lcd-time.paused, .new { animation: none; }
   .ticker-track { padding-left: 0; }
   .lcd-title.scrolling { padding-left: 0; }
 }

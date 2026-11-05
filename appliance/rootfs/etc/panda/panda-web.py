@@ -429,7 +429,7 @@ class Collector:
     def collect(self):
         board = shell_conf("/etc/panda/board.conf")
         app = shell_conf("/etc/panda/appliance.conf")
-        return {
+        snap = {
             "time": time.time(),
             "hits": self.hits,
             "host": self.host(board, app),
@@ -449,6 +449,33 @@ class Collector:
             "ota": self.slow.get("ota"),
             "upload": dict(UPLOAD),
         }
+        self.play_clocks(snap)
+        return snap
+
+    @staticmethod
+    def play_clocks(snap):
+        """Each stream's play time (s) as of this snapshot, the same for every client.
+
+        Bluetooth: the phone's AVRCP position (BlueZ advances it while playing).
+        Others: panda-arbiter's clock in nowplaying.json (time.monotonic() based).
+        """
+        now = time.monotonic()
+        track = (snap.get("bt") or {}).get("track") or {}
+        for x in (snap.get("audio") or {}).get("streams", []):
+            np = (snap.get("nowplaying") or {}).get(x.get("source")) or {}
+            if x.get("source") == "Bluetooth" and track.get("position"):
+                x["elapsed"] = track["position"] / 1000
+                x["playing"] = track.get("status") == "playing"
+                if track.get("duration"):
+                    x["duration"] = track["duration"] / 1000
+            elif "pos" in np and "pos_at" in np:
+                x["playing"] = bool(np.get("playing"))
+                x["elapsed"] = np["pos"] + (max(0.0, now - np["pos_at"]) if x["playing"] else 0.0)
+                if np.get("duration"):
+                    x["duration"] = np["duration"]
+            else:
+                continue
+            x["elapsed"] = round(x["elapsed"], 3)
 
     def host(self, board, app):
         up = float(read("/proc/uptime", "0").split()[0])

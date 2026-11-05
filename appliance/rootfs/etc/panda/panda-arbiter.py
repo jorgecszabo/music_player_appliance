@@ -91,17 +91,63 @@ def source_of(props):
 
 
 class NowPlaying:
+    """Per source: track info, and a play clock shared by every web client.
+
+    The clock is pos (s) as of pos_at (time.monotonic(), the same clock in
+    every process), advancing while playing. It counts the stream's running
+    time (kept across pauses, back to 0 on a new title) unless the source
+    reports a real track position (AirPlay prgr, Spotify position_ms).
+    """
+    PRECISE_S = 3.0   # a new title this soon after a real position doesn't reset it
+
     def __init__(self):
         self.lock = threading.Lock()
         self.data = {}
+        self.precise_at = {}
 
     def set(self, source, **fields):
         with self.lock:
             cur = self.data.get(source, {})
+            title = fields.get("title")
+            if (title is not None and title != cur.get("title")
+                    and time.monotonic() - self.precise_at.get(source, -1e9) > self.PRECISE_S):
+                self._clock(cur, 0.0, cur.get("playing", False))
+                cur.pop("duration", None)
             cur.update({k: v for k, v in fields.items() if v is not None})
             cur["updated"] = time.time()
             self.data[source] = cur
             self.write()
+
+    @staticmethod
+    def _clock(cur, pos, playing):
+        cur["pos"] = round(max(0.0, pos), 3)
+        cur["pos_at"] = time.monotonic()
+        cur["playing"] = bool(playing)
+
+    @staticmethod
+    def _now(cur):
+        pos = cur.get("pos", 0.0)
+        if cur.get("playing"):
+            pos += time.monotonic() - cur.get("pos_at", time.monotonic())
+        return pos
+
+    def position(self, source, pos, playing=None, duration=None):
+        """A real track position from the source."""
+        with self.lock:
+            cur = self.data.setdefault(source, {})
+            self._clock(cur, pos, cur.get("playing", True) if playing is None else playing)
+            if duration:
+                cur["duration"] = round(duration, 3)
+            self.precise_at[source] = time.monotonic()
+            self.write()
+
+    def running(self, source, playing):
+        """The source's stream started or stopped running: run or hold the clock."""
+        with self.lock:
+            cur = self.data.setdefault(source, {})
+            if bool(cur.get("playing")) != playing or "pos" not in cur:
+                self._clock(cur, self._now(cur), playing)
+                self.write()
 
     def drop(self, source, *keys):
         with self.lock:
@@ -113,6 +159,7 @@ class NowPlaying:
 
     def clear(self, source):
         with self.lock:
+            self.precise_at.pop(source, None)
             if self.data.pop(source, None) is not None:
                 self.write()
 
@@ -209,6 +256,8 @@ class Arbiter:
             prev, known["state"] = known["state"], state
             if os.environ.get("ARBITER_DEBUG"):
                 log(f"debug: {known['source']} node {oid}: {prev} -> {state}")
+            if state == "running" or prev == "running":
+                NOW.running(known["source"], state == "running")
             if state == "running" and prev != "running":
                 known["since"] = time.monotonic()
                 threading.Thread(target=self.started, args=(oid,), daemon=True).start()
@@ -266,8 +315,7 @@ class Arbiter:
 
     def stream_gone(self, st):
         log(f"{st['source']} stream removed")
-        if st["source"] != "Bluetooth":
-            NOW.clear(st["source"])
+        NOW.clear(st["source"])   # Bluetooth: only the play clock (track info is panda-bt's)
         self.unmute_survivor()
 
     def unmute_survivor(self):
@@ -349,7 +397,26 @@ asyncio.run(main(sys.argv[1]))
                 NOW.set("Spotify", title=t.get("name") or t.get("title"),
                         artist=artists if isinstance(artists, str) else None,
                         album=album if isinstance(album, str) else None)
+                pos, dur = ms_field(d, t, "position_ms", "progress_ms"), ms_field(t, d, "duration_ms")
+                if pos is not None:
+                    playing = d.get("is_playing")
+                    if playing is None and d.get("is_paused") is not None:
+                        playing = not d["is_paused"]
+                    NOW.position("Spotify", pos, playing=None if playing is None else bool(playing),
+                                 duration=dur)
             time.sleep(5)
+
+
+def ms_field(*dicts_then_keys):
+    """The first numeric value (ms) of any of the keys in any of the dicts, in seconds."""
+    dicts = [x for x in dicts_then_keys if isinstance(x, dict)]
+    keys = [x for x in dicts_then_keys if isinstance(x, str)]
+    for dct in dicts:
+        for k in keys:
+            v = dct.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0:
+                return v / 1000
+    return None
 
 
 # --- now playing: AirPlay (shairport-sync metadata pipe) ------------------------------
@@ -357,6 +424,19 @@ ITEM = re.compile(r"<item><type>([0-9a-f]{8})</type><code>([0-9a-f]{8})</code><l
                   r"(?:\s*<data encoding=\"base64\">\s*([A-Za-z0-9+/=\s]*?)</data>)?</item>", re.S)
 # Track info (iPhone/Mac senders) and the sender itself (PipeWire sends no track info).
 FIELDS = {"minm": "title", "asar": "artist", "asal": "album", "snua": "client", "clip": "client_ip"}
+
+
+def airplay_progress(text):
+    """prgr: RTP frames (44.1 kHz) "start/current/end" of the track, at play, resume and seek."""
+    try:
+        start, cur, end = (int(x) for x in text.strip().split("/"))
+    except ValueError:
+        return
+    pos, dur = ((cur - start) % 2**32) / 44100, ((end - start) % 2**32) / 44100
+    if pos <= dur:      # end is 0/garbage for senders without a track length
+        NOW.position("AirPlay", pos, playing=True, duration=dur)
+    else:
+        NOW.position("AirPlay", pos, playing=True)
 
 
 def airplay_meta():
@@ -374,11 +454,17 @@ def airplay_meta():
                         buf = buf[m.end():]
                         code = bytes.fromhex(m.group(2)).decode("ascii", "replace")
                         data = m.group(4)
-                        if code in FIELDS and data:
+                        if code == "prgr" and data:
+                            airplay_progress(base64.b64decode("".join(data.split())).decode("ascii", "replace"))
+                        elif code in FIELDS and data:
                             val = base64.b64decode("".join(data.split())).decode("utf-8", "replace")
                             NOW.set("AirPlay", **{FIELDS[code]: val})
                         elif code == "pbeg":   # play stream begin: forget the last track
                             NOW.drop("AirPlay", "title", "artist", "album")
+                        elif code == "pfls":   # flush: paused (or seeking; prgr follows)
+                            NOW.running("AirPlay", False)
+                        elif code == "prsm":   # resumed
+                            NOW.running("AirPlay", True)
                         elif code == "pend":   # play stream end
                             NOW.clear("AirPlay")
         except FileNotFoundError:

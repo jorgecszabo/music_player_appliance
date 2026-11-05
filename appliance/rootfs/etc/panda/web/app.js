@@ -7,7 +7,9 @@
 const $ = (id) => document.getElementById(id);
 let last = null;          // latest status snapshot
 let dragging = new Set(); // sliders the user is moving (don't overwrite them)
-const playingSince = {};  // stream id -> when it started running (LCD elapsed time)
+// LCD play clock: the server's elapsed time for the active stream, advanced
+// locally between status updates (every 2 s) so the digits tick each second.
+const clock = { id: null, base: 0, t0: 0, playing: false, timer: null };
 
 // --- helpers -----------------------------------------------------------------------
 function el(tag, props = {}, ...children) {
@@ -460,6 +462,39 @@ function activeStream(s) {
   return streams.find((x) => x.state === "running") || null;
 }
 
+function clockNow() {
+  return clock.base + (clock.playing ? (performance.now() - clock.t0) / 1000 : 0);
+}
+
+// Take the server's time for the active stream. Updates arrive a little late,
+// so a time slightly behind ours is that delay, not a step back: keep ours
+// unless it's off by a second or more (seek, new track, phone's correction).
+function setClock(act) {
+  const known = act && typeof act.elapsed === "number";
+  const playing = !!known && act.playing !== false;
+  if (!known) {
+    Object.assign(clock, { id: null, base: 0, playing: false });
+  } else {
+    const ours = clock.id === act.id ? clockNow() : null;
+    const keep = ours !== null && playing && clock.playing &&
+      act.elapsed <= ours && ours - act.elapsed < 1;
+    if (!keep) Object.assign(clock, { id: act.id, base: act.elapsed, t0: performance.now(), playing });
+  }
+  setText("lcd-state", !act ? "■" : known && !playing ? "❚❚" : "▶");
+  $("lcd-time").classList.toggle("paused", !!act && known && !playing);
+  tickClock();
+}
+
+function tickClock() {
+  clearTimeout(clock.timer);
+  clock.timer = null;
+  if (clock.id === null) return setText("lcd-time", "--:--");
+  const t = clockNow();
+  setText("lcd-time", fmtClock(t * 1000));
+  // Wake just after the next whole second of play time.
+  if (clock.playing) clock.timer = setTimeout(tickClock, (1 - (t % 1)) * 1000 + 15);
+}
+
 function renderNowPlaying(s) {
   const streams = (s.audio && s.audio.streams) || [];
   const act = activeStream(s);
@@ -492,16 +527,7 @@ function renderNowPlaying(s) {
     if (t.scrollWidth > t.parentElement.clientWidth) t.classList.add("scrolling");
   }
 
-  for (const x of streams) {
-    if (x.state === "running") playingSince[x.id] ??= Date.now();
-    else delete playingSince[x.id];
-  }
-  setText("lcd-state", act ? "▶" : "■");
-  if (act && act.source === "Bluetooth" && track && track.position) {
-    setText("lcd-time", fmtClock(track.position));
-  } else {
-    setText("lcd-time", act ? fmtClock(Date.now() - playingSince[act.id]) : "--:--");
-  }
+  setClock(act);
   setText("lcd-codec", act ? (act.codec || act.format || "PCM").toUpperCase() : "---");
   setText("lcd-rate", act ? kHz(act.rate) : "-- kHz");
   setText("lcd-out", `OUT ${kHz(sink && sink.rate)}`);

@@ -14,6 +14,7 @@ case "$ALPINE_ARCH" in
     armv7)   DEB_PLATFORM=linux/arm/v7; DEB_TRIPLET=arm-linux-gnueabihf; LDSO=ld-linux-armhf.so.3 ;;
     aarch64) DEB_PLATFORM=linux/arm64;  DEB_TRIPLET=aarch64-linux-gnu;   LDSO=ld-linux-aarch64.so.1 ;;
     x86_64)  DEB_PLATFORM=linux/amd64;  DEB_TRIPLET=x86_64-linux-gnu;    LDSO=ld-linux-x86-64.so.2 ;;
+    *) echo "no Soloist build for $ALPINE_ARCH (set SPOTIFY=no in board.conf)" >&2; exit 1 ;;
 esac
 OUT="$PROJECT_DIR/build/soloist"
 mkdir -p "$OUT"

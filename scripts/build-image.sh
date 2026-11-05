@@ -16,8 +16,11 @@ if [ ! -d "$APORTS/scripts" ]; then
         https://gitlab.alpinelinux.org/alpine/aports.git "$APORTS"
     git -C "$APORTS" sparse-checkout set scripts
 fi
-ls "$PROJECT_DIR"/packages/main/"$ALPINE_ARCH"/"$KERNEL_PACKAGE"-*.apk >/dev/null 2>&1 \
-    || { echo "build the kernel package first: scripts/build-package.sh $KERNEL_PACKAGE"; exit 1; }
+# Our own kernel (an aport) must be built first; another one (linux-rpi) comes from Alpine.
+if [ -f "$BOARD_DIR/aports/$KERNEL_PACKAGE/APKBUILD" ] || [ -f "$PROJECT_DIR/aports/$KERNEL_PACKAGE/APKBUILD" ]; then
+    ls "$PROJECT_DIR"/packages/main/"$ALPINE_ARCH"/"$KERNEL_PACKAGE"-*.apk >/dev/null 2>&1 \
+        || { echo "build the kernel package first: scripts/build-package.sh $KERNEL_PACKAGE"; exit 1; }
+fi
 # The appliance package is rebuilt every time: it carries appliance/rootfs.
 "$PROJECT_DIR/scripts/build-appliance.sh"
 [ -f "$BOARD_DIR/mkimg.$BOARD.sh" ] || { echo "missing $BOARD_DIR/mkimg.$BOARD.sh"; exit 1; }
@@ -48,6 +51,10 @@ fi
 MKIMAGE_FILES="boards/$BOARD/mkimg.$BOARD.sh boards/$BOARD/board.conf
     appliance/appliance.conf appliance/packages.list appliance/genapkovl.sh"
 [ -s "$APPLIANCE_DIR/authorized_keys" ] && MKIMAGE_FILES="$MKIMAGE_FILES appliance/authorized_keys"
+# Device-tree overlay sources the board's profile compiles (boards/rpi1).
+for f in "$BOARD_DIR"/*.dts; do
+    [ -f "$f" ] && MKIMAGE_FILES="$MKIMAGE_FILES boards/$BOARD/${f##*/}"
+done
 
 # mkimage passes apk --usermode, which refuses root. So the root step only
 # installs our signing key into the container's /etc/apk/keys, then mkimage

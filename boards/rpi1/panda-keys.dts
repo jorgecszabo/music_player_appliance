@@ -1,0 +1,61 @@
+// The TFT's 4 tactile buttons as one gpio-keys device ("panda-keys"), media
+// keys only. Compiled by mkimg.rpi1.sh into overlays/panda-keys.dtbo and
+// loaded by config.txt (dtoverlay=panda-keys). Rpi's own gpio-key overlay
+// would make one input device per button.
+// GPIOs from Adafruit's docs for the 26-pin 2.8" TFT: 23, 22, 27 (21 on a
+// rev 1 board), 18; each button pulls its line to ground. Which button is
+// which, left to right: unverified (RPI1.md, B4).
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	fragment@0 {
+		target = <&gpio>;
+		__overlay__ {
+			panda_key_pins: panda_key_pins {
+				brcm,pins = <23 22 27 18>;
+				brcm,function = <0 0 0 0>;	/* input */
+				brcm,pull = <2 2 2 2>;		/* pull-up */
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/";
+		__overlay__ {
+			panda_keys: panda_keys {
+				compatible = "gpio-keys";
+				label = "panda-keys";
+				pinctrl-names = "default";
+				pinctrl-0 = <&panda_key_pins>;
+
+				play {
+					label = "Play";
+					linux,code = <164>;	/* KEY_PLAYPAUSE */
+					gpios = <&gpio 23 1>;	/* GPIO_ACTIVE_LOW */
+					debounce-interval = <20>;
+				};
+				next {
+					label = "Next";
+					linux,code = <163>;	/* KEY_NEXTSONG */
+					gpios = <&gpio 22 1>;
+					debounce-interval = <20>;
+				};
+				voldown {
+					label = "Vol-";
+					linux,code = <114>;	/* KEY_VOLUMEDOWN */
+					gpios = <&gpio 27 1>;
+					debounce-interval = <20>;
+				};
+				volup {
+					label = "Vol+";
+					linux,code = <115>;	/* KEY_VOLUMEUP */
+					gpios = <&gpio 18 1>;
+					debounce-interval = <20>;
+				};
+			};
+		};
+	};
+};

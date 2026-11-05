@@ -16,6 +16,7 @@ APPLIANCE_DIR="$PROJECT_DIR/appliance"
 # Target-arch build container (runs under qemu-user binfmt on x86_64).
 case "$ALPINE_ARCH" in
     armv7)   CONTAINER_PLATFORM=linux/arm/v7 ;;
+    armhf)   CONTAINER_PLATFORM=linux/arm/v6 ;;   # ARMv6 hard-float (Raspberry Pi 1)
     aarch64) CONTAINER_PLATFORM=linux/arm64 ;;
     x86_64)  CONTAINER_PLATFORM=linux/amd64 ;;
     *) echo "no container platform for ALPINE_ARCH=$ALPINE_ARCH" >&2; exit 1 ;;

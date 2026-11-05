@@ -16,11 +16,17 @@
 #   _defconfig       base config, e.g. omap2plus_defconfig
 #   _fragment        config fragment in the aport dir, merged over the defconfig
 #   _dtbs            DTB globs relative to arch/arm/boot/dts/
-#   _extmods         optional: out-of-tree module dirs (project-relative, each
-#                    with a Kbuild), built against this kernel and installed
-#                    in lib/modules/<release>/updates/
+#   _extmods         optional: extra out-of-tree module dirs (project-relative,
+#                    each with a Kbuild), on top of DEFAULT_EXTMODS below
+#   _extmods_skip    optional: DEFAULT_EXTMODS entries this kernel leaves out
+# Out-of-tree modules are built against this kernel and installed in
+# lib/modules/<release>/updates/. A module dir may have a kconfig.require file:
+# grep -xE patterns (one per line, # comments) the kernel config must match.
 # ARM (zImage) only so far.
 set -euo pipefail
+# Generic out-of-tree drivers (USB peripherals, not board hardware), built for
+# every board kernel unless its APKBUILD lists them in _extmods_skip.
+DEFAULT_EXTMODS="drivers/r92su"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APORT_DIR="$(cd "${1:?usage: $0 <aport dir>}" && pwd)"
 APORT_REL="${APORT_DIR#"$PROJECT_DIR"/}"
@@ -49,7 +55,18 @@ _flavor=$(apkvar _flavor)
 _defconfig=$(apkvar _defconfig)
 _fragment=$(apkvar _fragment)
 _dtbs=$(apkvar _dtbs)
-_extmods=$(sed -n 's/^_extmods=//p' "$APORT_DIR/APKBUILD" | tr -d '"')
+_extmods_extra=$(sed -n 's/^_extmods=//p' "$APORT_DIR/APKBUILD" | tr -d '"')
+_extmods_skip=$(sed -n 's/^_extmods_skip=//p' "$APORT_DIR/APKBUILD" | tr -d '"')
+for m in $_extmods_skip; do
+    case " $DEFAULT_EXTMODS " in *" $m "*) ;;
+    *) echo "_extmods_skip: $m isn't in DEFAULT_EXTMODS ($DEFAULT_EXTMODS)" >&2; exit 1 ;; esac
+done
+_extmods=""
+for m in $DEFAULT_EXTMODS $_extmods_extra; do
+    case " $_extmods_skip $_extmods " in *" $m "*) continue ;; esac
+    [ -f "/work/$m/Kbuild" ] || { echo "extmod $m: /work/$m/Kbuild missing" >&2; exit 1; }
+    _extmods="$_extmods $m"
+done
 SRC=/work/build/src/linux-$pkgver
 OUT=/work/build/kcross-out/$_flavor
 STAGE=/work/build/kernel-staging/$_flavor
@@ -86,10 +103,19 @@ while IFS= read -r l; do
     esac
 done < "$APORT_DIR/$_fragment"
 [ "$bad" = 0 ] || { echo "fix $APORT_REL/$_fragment" >&2; exit 1; }
+# Out-of-tree modules have no Kconfig: check what they need before the long
+# build, so a missing option isn't a modpost error (or a module that can't load).
+for m in $_extmods; do
+    [ -f "/work/$m/kconfig.require" ] || continue
+    while IFS= read -r p; do
+        case "$p" in ''|'#'*) continue ;; esac
+        grep -qxE "$p" "$OUT"/.config || { echo "$m needs $p, but $(grep "^${p%%=*}=\|^# ${p%%=*} " "$OUT"/.config || echo "${p%%=*} is off")" >&2; bad=1; }
+    done < "/work/$m/kconfig.require"
+done
+[ "$bad" = 0 ] || { echo "fix $APORT_REL/$_fragment, or list the module in _extmods_skip" >&2; exit 1; }
 make -C "$OUT" -j"$(nproc)" KBUILD_BUILD_VERSION="$((pkgrel + 1))-Alpine" zImage modules dtbs
 # External modules build in a copy, so the objects stay out of the source dir.
 for m in $_extmods; do
-    [ -f "/work/$m/Kbuild" ] || { echo "_extmods: /work/$m/Kbuild missing" >&2; exit 1; }
     rm -rf "$OUT/extmod/${m##*/}" && mkdir -p "$OUT/extmod"
     cp -r "/work/$m" "$OUT/extmod/${m##*/}"
     make -C "$OUT" -j"$(nproc)" M="$OUT/extmod/${m##*/}" modules

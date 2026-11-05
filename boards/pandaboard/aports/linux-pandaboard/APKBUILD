@@ -26,9 +26,9 @@ source="pandaboard.config"
 _defconfig=omap2plus_defconfig
 _fragment=pandaboard.config
 _dtbs="ti/omap/omap4-panda*.dtb"
-# Out-of-tree modules: r92su (RTL8188SU/8191SU/8192SU USB Wi-Fi, no mainline
-# driver since r8712u left staging; see drivers/r92su/PORTING.md).
-_extmods="drivers/r92su"
+# Out-of-tree modules: the generic ones (DEFAULT_EXTMODS in
+# scripts/cross-build-kernel.sh, e.g. r92su) are built for every board kernel.
+# _extmods adds more, _extmods_skip leaves defaults out.
 # The staged config must have this (catches a wrong or stale staging dir).
 # Required options (grep -xE patterns): the SoC, and USB audio (the appliance's
 # alternative output, audio-route.py).

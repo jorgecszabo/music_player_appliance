@@ -15,7 +15,7 @@
 _flavor=beaglexm
 pkgname=linux-$_flavor
 pkgver=6.18.60
-pkgrel=0
+pkgrel=1
 pkgdesc="Linux LTS kernel for the BeagleBoard-xM (DM3730)"
 url="https://www.kernel.org"
 arch="armv7"

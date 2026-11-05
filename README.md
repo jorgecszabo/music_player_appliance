@@ -73,6 +73,9 @@ A board directory needs a
 `board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile
 and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
 `scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
+That script also builds the generic out-of-tree drivers in `drivers/` (r92su:
+RTL8188SU/8191SU/8192SU USB Wi-Fi) for every board kernel; see
+`boards/_template/aports/README.md`.
 
 ## Updates (OTA)
 

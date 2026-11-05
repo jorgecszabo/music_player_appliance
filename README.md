@@ -9,16 +9,16 @@ See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 
 ## Status and support
 
-A hobby project to give obsolete dev boards a second life. It works for me: it
-plays Spotify, AirPlay, Bluetooth and internet radio daily on a PandaBoard with a
-USB Wi-Fi dongle. It's published as is:
+A hobby project to give obsolete dev boards a second life. It works for me on
+all three supported boards (PandaBoard, BeagleBoard-xM and pcDuino Lite): Spotify,
+AirPlay, Bluetooth and internet radio. It's published as is:
 
 - **No support promised.** Issues and patches get read eventually, but there's no
   roadmap and no guaranteed answer. Requests to support another board are best
   sent as a port (see [Porting](#porting-the-appliance-to-another-board)).
 - **Rough edges are known and listed** in PLAN.md ("Still to do"). Among them: the
   PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet (use Ethernet or a USB
-  dongle), and the pcDuino port hasn't been tested on a real board.
+  dongle).
 - **How it was made:** much of the code, including the r92su Wi-Fi driver port in
   `drivers/`, was written with an AI assistant (Claude) and tested on the boards,
   but not reviewed line by line. Board-specific code aims for "works in
@@ -30,7 +30,7 @@ USB Wi-Fi dongle. It's published as is:
 |---|---|---|---|---|---|
 | `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 (Wi-Fi doesn't connect yet), or USB |
 | `beaglexm` | BeagleBoard-xM | DM3730 (OMAP3), armv7 | `linux-beaglexm` | TWL4030 3.5 mm jack (48 kHz), or USB audio | none onboard: USB dongles |
-| `pcduino` (not tested on the board yet) | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
+| `pcduino` | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
 
 All boot from an SD card through U-Boot v2024.07. The OMAP boards use MLO +
 `u-boot.img` and a serial console on `ttyS2`; the pcDuino uses

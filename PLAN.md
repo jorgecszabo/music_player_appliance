@@ -12,8 +12,8 @@ Audio sources (all mixed by PipeWire on the board):
 - **Spotify Connect** (Spotify Soloist; librespot/spotifyd are blocked, see Phase 4)
 - **AirPlay** (shairport-sync). Linux desktops with PipeWire can stream to this
   through PipeWire's RAOP sink.
-- **PipeWire/PulseAudio network sink** (pulse TCP or RTP/ROC), as an alternative
-  for Linux hosts
+- ~~PipeWire/PulseAudio network sink~~: dropped (2026-11-05). Linux desktops use
+  AirPlay; its Wi-Fi clicks get fixed in PipeWire's RAOP sink instead (see "Still to do").
 - **Bluetooth A2DP sink**: phones pair and play to the Panda like a BT speaker
 
 Output: the onboard TWL6040 3.5 mm jack, or a USB audio card (chosen on the web page). Optional later: HDMI audio.
@@ -139,9 +139,14 @@ arbitration, Bluetooth integration and the network sink.
   - Bonus: Fedora desktops can stream to the Panda over AirPlay through
     PipeWire's RAOP sink (`libpipewire-module-raop-discover`), with no extra
     setup on the Panda.
-- **PipeWire/Pulse network sink (alternative):** enable
-  `module-native-protocol-tcp` (restricted to the LAN subnet) or RTP/ROC sink,
-  and use a tunnel sink on the desktop.
+- **PipeWire/Pulse network sink: dropped (2026-11-05).** PipeWire has no network
+  protocol of its own: its own network modules (rtp-session, ROC, netjack2, VBAN) are UDP
+  and either click on lossy Wi-Fi like RAOP or have no discovery. The reliable,
+  discoverable option, a Pulse tunnel with zeroconf, would need an access-controlled
+  pipewire-pulse instance, an allow list and a web page window, and would only help this
+  speaker. Fixing retransmits in PipeWire's RAOP sink helps every AirPlay receiver
+  instead. Revisit only for low latency (calls, games; AirPlay is ~1.5-2 s) or multiroom
+  (Snapcast, not a Pulse sink).
 - **Volatile state:** PipeWire and WirePlumber state go to tmpfs. Only
   deliberately chosen config is persisted with lbu (`/etc/pipewire`,
   `/etc/wireplumber`, the shairport-sync and librespot config).
@@ -725,7 +730,9 @@ Next:
 Later:
 - **BT 5.x USB dongle** for the remaining A2DP glitches (`btusb` + firmware in the modloop,
   onboard controller disabled); it also frees the WL1271 antenna for Wi-Fi.
-- **PipeWire/Pulse network sink** for Linux hosts (Phase 4 goal; AirPlay covers it for now).
+- **Upstream: PipeWire RAOP sink answers retransmit requests** (fixes the remaining AirPlay
+  clicks on Wi-Fi; sender side only, no appliance change). Background and protocol notes:
+  PIPEWIRE-RAOP-RETRANSMIT.md. Replaces the PipeWire/Pulse network sink (see Phase 4).
 - **McPDM driver fix** (side quest): DAI `trigger` patch, kernel build + boot test, upstream.
 - Wlcore firmware-crash recovery power-cycles Wi-Fi and takes BT down: watch for it.
 - Upstream notes: Alpine shairport-sync configure flags; PipeWire 1.6.8 raop-sink iov bug.

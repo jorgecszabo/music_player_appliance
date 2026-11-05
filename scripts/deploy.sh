@@ -24,7 +24,7 @@ scp -q $APKS "$HOST":/tmp/panda-deploy/
 # saved world stays "panda-appliance panda-board-<board>".
 ssh -o BatchMode=yes "$HOST" 'doas sh -euc "
     cp /etc/apk/world /tmp/panda-deploy/world
-    apk add --no-network --quiet /tmp/panda-deploy/*.apk || rc=\$?
+    apk add --no-network --quiet --force-non-repository /tmp/panda-deploy/*.apk || rc=\$?
     cp /tmp/panda-deploy/world /etc/apk/world
     [ -z \"\${rc:-}\" ] || exit \$rc
     sh /etc/panda/setup.sh

@@ -357,6 +357,7 @@ class Wifi:
         self.ctrl = None             # WpaCtrl for requests
         self.dhcp = None             # udhcpc Popen
         self.dhcp_ssid = None
+        self.dhcp_started = 0.0      # monotonic time udhcpc was last started
         self.results = []            # latest scan results
         self.results_at = 0.0
         self.scan_done = threading.Event()
@@ -499,8 +500,7 @@ class Wifi:
                         self.stop_iface()
                     if ad and not self.iface:
                         self.start_iface(ad)
-                    if self.dhcp is not None and self.dhcp.poll() is not None:
-                        self.dhcp = None
+                    self.check_dhcp()
                     p = self.pending
                     if p and time.monotonic() > p["until"]:
                         self.fail_pending("couldn't connect (no answer, or out of range)")
@@ -599,6 +599,21 @@ class Wifi:
         self.last_error = f"{p['ssid']}: {why}"
         self.reload()
 
+    def check_dhcp(self):
+        """udhcpc is started on CTRL-EVENT-CONNECTED only. If it exits while the
+        link stays associated (seen after a driver reload: interface removed and
+        re-created, then a quick disconnect/reconnect), nothing else would
+        start it again and the adapter would sit there with no address."""
+        if self.dhcp is not None and self.dhcp.poll() is not None:
+            log(f"{self.iface}: udhcpc exited (status {self.dhcp.returncode})")
+            self.dhcp = None
+        if (self.iface and self.dhcp is None and
+                time.monotonic() - self.dhcp_started >= 10):
+            st = self.wpa_status()
+            if st.get("wpa_state") == "COMPLETED":
+                log(f"{self.iface}: associated without udhcpc; starting it")
+                self.start_dhcp(self.iface, st.get("ssid", ""))
+
     def start_dhcp(self, ifname, ssid):
         with self.lock:
             if self.iface != ifname:
@@ -618,6 +633,7 @@ class Wifi:
                                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL)
             self.dhcp_ssid = ssid
+            self.dhcp_started = time.monotonic()
 
     # --- queries -------------------------------------------------------------------------
     def wpa_req(self, cmd, timeout=5):

@@ -18,7 +18,8 @@ Runs as root (service panda-bt): it saves pairings with lbu and drives LEDs.
 - Control socket /run/panda/bt.sock (group panda-web, for the web page):
   one JSON request per line, one JSON reply per line. Commands:
   {"cmd": "status"}, {"cmd": "pair", "open": true|false},
-  {"cmd": "forget", "path": "<device path>"}, {"cmd": "forget-all"}.
+  {"cmd": "forget", "path": "<device path>"}, {"cmd": "forget-all"},
+  {"cmd": "media", "action": "play|pause|next|previous"} (AVRCP, the connected phone).
 - If bluetoothd goes away, exit; supervise-daemon restarts us.
 """
 import asyncio
@@ -276,6 +277,19 @@ class App:
         await self.save(f"forgot {d.get('Alias', path)}")
 
     # --- control socket (web page) -------------------------------------------------
+    async def media(self, action):
+        """AVRCP command to the connected phone's media player."""
+        if action not in ("play", "pause", "next", "previous"):
+            raise ValueError(f"unknown media action {action!r}")
+        root = await self.iface("/", "org.freedesktop.DBus.ObjectManager")
+        for path, ifaces in (await root.call_get_managed_objects()).items():
+            if ("org.bluez.MediaPlayer1" in ifaces
+                    and self.devices.get(path.rsplit("/", 1)[0], {}).get("Connected")):
+                player = await self.iface(path, "org.bluez.MediaPlayer1")
+                await getattr(player, f"call_{action}")()
+                return {"ok": True}
+        raise ValueError("no connected phone with a media player")
+
     async def status(self):
         track = None
         try:
@@ -317,6 +331,8 @@ class App:
         if cmd == "forget-all":
             asyncio.ensure_future(self.forget_all())
             return {"ok": True}
+        if cmd == "media":
+            return await self.media(str(req.get("action", "")))
         raise ValueError(f"unknown command {cmd!r}")
 
     async def on_control(self, reader, writer):

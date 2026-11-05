@@ -23,6 +23,9 @@ firewall redirects port 80 to it. LAN only (firewall).
   GET  /api/radio/countries  all countries with stations (code, name, count)
   GET  /api/radio/favorites
   POST /api/radio            {"cmd": "play", "uuid"} | {"cmd": "stop"} | {"cmd": "fav", "uuid", "add": bool}
+  POST /api/transport        {"action": "toggle" | "next" | "prev"}  for the source playing (or the
+                             one to resume): radio (mpv, favorites), Bluetooth (AVRCP via panda-bt),
+                             AirPlay (toggle = mute: the sender owns playback)
   POST /api/ota/upload        an update bundle (.pota) as the raw body, Content-Type
                              application/x-panda-ota + X-Panda-Panel; streamed into
                              doas web-admin.sh ota-install (all checks run as root there)
@@ -240,6 +243,7 @@ def radio_status():
     title = meta.get("icy-title") or meta.get("StreamTitle") or ""
     params = mpv("get_property", "audio-params") or {}
     return {"available": True, "playing": True, "station": st,
+            "paused": bool(mpv("get_property", "pause")),
             "title": str(title)[:200],
             "codec": mpv("get_property", "audio-codec-name") or "",
             "bitrate": mpv("get_property", "audio-bitrate"),
@@ -934,7 +938,8 @@ class Handler(BaseHTTPRequestHandler):
                    "/api/service": self.service, "/api/system": self.system,
                    "/api/name": self.name, "/api/spotify-key": self.spotify_key,
                    "/api/audio": self.audio_settings, "/api/radio": self.radio,
-                   "/api/wifi": self.wifi, "/api/ota": self.ota_cmd}.get(path)
+                   "/api/wifi": self.wifi, "/api/ota": self.ota_cmd,
+                   "/api/transport": self.transport}.get(path)
         if handler is None:
             return self.send_json({"error": "not found"}, 404)
         try:
@@ -1168,6 +1173,64 @@ class Handler(BaseHTTPRequestHandler):
             RADIO["station"] = station_summary(st[0])
             return {"ok": True, "station": RADIO["station"]}
         raise ValueError("unknown command")
+
+    def transport(self, req):
+        """Play/pause, next, previous for the source that's playing, or else the one to
+        resume. For the front panel's buttons (panda-lcd), and anything else."""
+        action = req.get("action")
+        if action not in ("toggle", "next", "prev"):
+            raise ValueError("action must be toggle, next or prev")
+        streams = (COLLECTOR.status.get("audio") or {}).get("streams", [])
+        live = [x for x in streams if x.get("state") == "running"]
+        audible = [x for x in live if not x.get("mute")]
+        radio = radio_status()
+        track = bt_call({"cmd": "status"}).get("track") or {}
+        if audible:
+            src = audible[-1]["source"]
+        elif radio.get("paused"):
+            src = "Radio"
+        elif track.get("status") == "paused":
+            src = "Bluetooth"
+        elif any(x["source"] == "AirPlay" for x in live):
+            src = "AirPlay"          # muted by an earlier toggle
+        elif RADIO["station"]:
+            src = "Radio"            # stopped: play the last station again
+        else:
+            raise ValueError("nothing to play")
+        if src == "Radio":
+            self.radio_transport(action, radio)
+        elif src == "Bluetooth":
+            a = {"next": "next", "prev": "previous"}.get(action) \
+                or ("pause" if track.get("status") == "playing" else "play")
+            res = bt_call({"cmd": "media", "action": a})
+            if "error" in res:
+                raise ValueError(res["error"])
+        elif src == "AirPlay":
+            if action != "toggle":
+                raise ValueError("AirPlay can't skip tracks from the speaker")
+            node = next(x for x in streams if x["source"] == "AirPlay")
+            run(["wpctl", "set-mute", str(node["id"]), "0" if node.get("mute") else "1"], env=PW_ENV)
+        else:
+            raise ValueError(f"{src} can't be controlled from the speaker")
+        COLLECTOR.wake_fast.set()
+        return {"ok": True, "source": src}
+
+    def radio_transport(self, action, radio):
+        if action == "toggle" and radio.get("playing"):
+            mpv("set_property", "pause", not radio.get("paused"))
+            return
+        if action == "toggle":
+            uuid = RADIO["station"]["stationuuid"]
+        else:
+            uuids = [f["stationuuid"] for f in load_favorites()]
+            if not uuids:
+                raise ValueError("no radio favorites to step through")
+            cur = (RADIO["station"] or {}).get("stationuuid")
+            step = 1 if action == "next" else -1
+            i = (uuids.index(cur) + step) % len(uuids) if cur in uuids else (0 if step > 0 else -1)
+            uuid = uuids[i]
+        self.radio({"cmd": "play", "uuid": uuid})
+        mpv("set_property", "pause", False)   # mpv keeps "pause" across files
 
     def audio_settings(self, req):
         try:

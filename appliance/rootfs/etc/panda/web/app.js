@@ -253,7 +253,7 @@ function renderRadio(s) {
     setText("radio-station", (r.station && r.station.name) || "Radio");
     const fmt = [r.codec && r.codec.toUpperCase(), r.bitrate ? `${Math.round(r.bitrate / 1000)} kbps` : null,
       r.rate ? kHz(r.rate) : null].filter(Boolean).join(" / ");
-    setText("radio-title", r.buffering ? "Buffering..." : (r.title || fmt || "Playing"));
+    setText("radio-title", r.paused ? "Paused" : r.buffering ? "Buffering..." : (r.title || fmt || "Playing"));
   } else {
     setText("radio-station", "Radio off");
     setText("radio-title", "Pick a station below.");

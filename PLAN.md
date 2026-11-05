@@ -702,7 +702,7 @@ panda-web streams the body into `doas web-admin.sh ota-install`; all checks run 
   card's ACP profile (`USB_PROFILE`: auto, analog, IEC958, pro-audio), picked on the web page
   for quirky cards; all three play on the R19U. Unplugged: WirePlumber falls back to the
   onboard target and moves back on replug (tested with a sysfs unbind/bind). Radio through
-  it: 0 xruns, ~33% CPU on the xM. Not tested: the Panda.
+  it: 0 xruns, ~33% CPU on the xM. Also tested on the Panda.
   Master volume (web slider) remembered: `audio.conf MASTER_VOLUME`, written 2 s after the
   slider rests and saved with lbu; restored when the tone filter starts (arbiter ->
   `audio-route.py --master`), not on hotplug.

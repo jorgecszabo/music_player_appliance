@@ -220,7 +220,7 @@ These can't be done unattended: they need the card, serial wiring, a USB DAC and
 - **Card writer** `scripts/write-sdcard-sunxi.sh`: the OMAP layout (DOS label, FAT32 512 MiB at
   4 MiB), bootloader raw at 8 KiB. `--image` builds the card as a file without root
   (sfdisk + `mkfs.vfat --offset` + mtools); read back byte-identical, table intact after the
-  bootloader write. The card mode is untested (it needs sudo and a card).
+  bootloader write. The card mode (sudo, a real card) is tested too.
 - **Image + OTA**: 111 MB per slot (fits twice). OTA bundle builds; `test-ota.sh`: 20 passed
   (its fake cmdline now uses the board's console).
 - **QEMU** (`scripts/qemu-pcduino.sh`, QEMU 10.2 `cubieboard` in a container): the pcDuino's own
@@ -239,8 +239,7 @@ These can't be done unattended: they need the card, serial wiring, a USB DAC and
   `console=ttyS0,115200n8 console=tty0 consoleblank=0`, tty0 last so OpenRC writes there; a
   serial adapter, if one is used later, then gets only the kernel's messages). r2 checked in
   QEMU: boots to login, Ethernet up, all services except Soloist, OTA booted=confirmed=a. QEMU
-  has no HDMI, so the screen output itself is untested. First test planned: Ethernet only,
-  then the living room TV if SSH doesn't come up.
+  has no HDMI; the screen output is tested on the board.
 - Seen and left alone: the DT reserves 96 MiB of CMA (for display/video, below 256 MiB).
   It's reusable (movable pages use it), so it's not lost; trim it only if B4 shows memory
   pressure. `sysctl: kernel.unprivileged_bpf_disabled unknown`: same on the xM (no BPF syscall

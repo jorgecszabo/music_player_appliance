@@ -149,7 +149,8 @@ rc_add sshd default
 rc_add local default
 rc_add udev-postmount default
 rc_add crond default
-for s in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
+[ "${SPOTIFY:-yes}" = no ] && soloist="" || soloist=speaker-soloist
+for s in panda-audio-init speaker-pipewire speaker-wireplumber $soloist \
 	speaker-shairport speaker-radio speaker-arbiter panda-radio-init bluetooth panda-bt \
 	panda-wifi panda-chime-boot panda-web panda-ota-confirm; do
 	rc_add "$s" default

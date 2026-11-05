@@ -445,7 +445,20 @@ function sendTone() {
     usb_profile: toneSel.usb_profile }).catch(oops);
 }
 
+// board.conf SPOTIFY=no: the board has no Spotify, so the page doesn't mention it.
+function sourcesText(s, last) {
+  return (s.host.spotify === false ? ["AirPlay", "Bluetooth"] : ["Spotify", "AirPlay", "Bluetooth"])
+    .join(", ").replace(/, (\w+)$/, ` ${last} $1`);
+}
+
 function renderSpotify(s) {
+  const off = s.host.spotify === false;
+  $("spotify-group").hidden = off;
+  $("log-soloist").hidden = off;
+  $("log-soloist").disabled = off;
+  if (off && $("log-name").value === "soloist") $("log-name").value = "shairport";
+  setText("name-where", sourcesText(s, "and"));
+  if (off) return;
   const sp = s.spotify;
   if (!sp) setText("spotify-text", "Checking the API key...");
   else if (sp.key_set) {
@@ -548,7 +561,7 @@ function renderNowPlaying(s) {
   tbody.replaceChildren();
   if (!streams.length) {
     tbody.append(el("tr", {}, el("td", { colspan: 4, class: "center" },
-      `Nothing is playing. Pick "${s.host.speaker_name}" in Spotify, AirPlay or Bluetooth.`)));
+      `Nothing is playing. Pick "${s.host.speaker_name}" in ${sourcesText(s, "or")}.`)));
     return;
   }
   for (const x of streams) {
@@ -1028,7 +1041,7 @@ function wireActions() {
   $("name-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const name = $("name-input").value.trim();
-    if (!await dialog(`Rename the speaker to "${name}"? Spotify, AirPlay and Bluetooth restart (about 30 s).`)) return;
+    if (!await dialog(`Rename the speaker to "${name}"? ${sourcesText(last || { host: {} }, "and")} restart (about 30 s).`)) return;
     try {
       const r = await post("/api/name", { name });
       delete $("name-input").dataset.edited;

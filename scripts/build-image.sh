@@ -95,7 +95,9 @@ CH="$APPLIANCE_DIR/rootfs/etc/panda/chimes.py"
 python3 -I "$CH" "$SLOT/chimes" && md5sum "$CH" | cut -d" " -f1 > "$SLOT/chimes/.source"
 # - the Soloist glibc runtime (no Soloist binary: the device downloads it)
 RT="$PROJECT_DIR/build/soloist/soloist-runtime-$ALPINE_ARCH.squashfs"
-if [ -f "$RT" ]; then
+if [ "${SPOTIFY:-yes}" = no ]; then
+    :   # board.conf SPOTIFY=no: no Soloist build for this arch
+elif [ -f "$RT" ]; then
     mkdir -p "$SD/soloist"; cp "$RT" "$SD/soloist/soloist-runtime.squashfs"
 else
     echo "WARNING: no $RT (scripts/build-soloist-runtime.sh): Spotify won't work" >&2

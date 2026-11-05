@@ -30,15 +30,18 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /etc/panda/appliance.conf
 
 die() { echo "web-admin: $*" >&2; exit 2; }
+# board.conf SPOTIFY=no: no speaker-soloist service to start or restart.
+spotify() { [ "${SPOTIFY:-yes}" != no ]; }
+soloist() { spotify || return 0; rc-service speaker-soloist "$@"; }
 bg() { setsid "$@" </dev/null >>/var/log/panda-web-admin.log 2>&1 & }
 
 restart_audio() {
 	rc-service panda-bt stop; rc-service speaker-shairport stop
-	rc-service speaker-soloist stop; rc-service speaker-wireplumber stop
+	soloist stop; rc-service speaker-wireplumber stop
 	rc-service speaker-pipewire stop
 	rc-service panda-audio-init restart
 	rc-service speaker-pipewire start; rc-service speaker-wireplumber start
-	rc-service speaker-soloist start; rc-service speaker-shairport start
+	soloist start; rc-service speaker-shairport start
 	rc-service speaker-radio start; rc-service speaker-arbiter start
 	rc-service panda-bt start
 }
@@ -46,7 +49,8 @@ restart_audio() {
 case "${1:-}" in
 restart)
 	case "${2:-}" in
-		speaker-soloist|speaker-shairport|speaker-radio|panda-bt|panda-wifi|avahi-daemon|chronyd) bg rc-service "$2" restart ;;
+		speaker-soloist) spotify || die "Spotify is off on this board"; bg rc-service "$2" restart ;;
+		speaker-shairport|speaker-radio|panda-bt|panda-wifi|avahi-daemon|chronyd) bg rc-service "$2" restart ;;
 		bluetooth) bg sh -c 'rc-service bluetooth restart; rc-service panda-bt start' ;;
 		*) die "not a restartable service: ${2:-}" ;;
 	esac ;;
@@ -65,7 +69,8 @@ chrony)
 	chronyc -n tracking 2>&1 || true ;;
 logs)
 	case "${2:-}" in
-		pipewire|wireplumber|soloist|shairport|arbiter|radio) f=/var/log/speaker/$2.log ;;
+		soloist) spotify || die "Spotify is off on this board"; f=/var/log/speaker/$2.log ;;
+		pipewire|wireplumber|shairport|arbiter|radio) f=/var/log/speaker/$2.log ;;
 		panda-bt|panda-wifi|panda-web|panda-web-admin) f=/var/log/$2.log ;;
 		messages) f=/var/log/messages ;;
 		*) die "unknown log: ${2:-}" ;;
@@ -89,11 +94,12 @@ set-name)
 		/etc/panda/appliance.conf > "$tmp" && mv "$tmp" /etc/panda/appliance.conf
 	logger -t panda-web "speaker renamed to $name"
 	# setup.sh regenerates every config that carries the name and saves (lbu).
-	bg sh -c 'sh /etc/panda/setup.sh && rc-service speaker-soloist restart \
-		&& rc-service speaker-shairport restart \
-		&& rc-service bluetooth restart && rc-service panda-bt start'
+	r=""; spotify && r="rc-service speaker-soloist restart && "
+	bg sh -c "sh /etc/panda/setup.sh && ${r}rc-service speaker-shairport restart \
+		&& rc-service bluetooth restart && rc-service panda-bt start"
 	echo renaming ;;
 set-soloist-key)
+	spotify || die "Spotify is off on this board"
 	# One line on stdin. Never echoed, never on a command line.
 	IFS= read -r key || true
 	key=$(printf '%s' "$key" | tr -d '\r')

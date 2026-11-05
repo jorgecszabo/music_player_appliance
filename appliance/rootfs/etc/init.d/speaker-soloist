@@ -34,6 +34,7 @@ start_pre() {
 	. /etc/panda/board.conf
 	. /etc/panda/appliance.conf
 	local media=/media/"$BOOT_MEDIA"/soloist
+	[ "${SPOTIFY:-yes}" != no ] || { eerror "Spotify is off on this board (board.conf SPOTIFY=no)"; return 1; }
 	[ -s /etc/panda/soloist.key ] || { eerror "no API key in /etc/panda/soloist.key"; return 1; }
 	/etc/panda/soloist-update.sh mount \
 		|| { eerror "can't mount $media/soloist-runtime.squashfs"; return 1; }

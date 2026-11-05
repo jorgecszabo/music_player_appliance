@@ -31,6 +31,11 @@
 set -eu
 . /etc/panda/board.conf
 log() { echo "soloist-update: $*"; logger -t soloist-update "$*" 2>/dev/null || true; }
+# board.conf SPOTIFY=no: nothing to keep current. The cron job stays quiet.
+if [ "${SPOTIFY:-yes}" = no ]; then
+	[ "${1:-}" = due ] && exit 0
+	log "Spotify is off on this board (board.conf SPOTIFY=no)"; exit 1
+fi
 
 RT=/opt/soloist-runtime
 MEDIA=/media/"$BOOT_MEDIA"

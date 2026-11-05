@@ -104,7 +104,12 @@ fi
 sh /etc/panda/gen-configs.sh
 
 # --- Spotify: the key is read by speaker-soloist's start_pre (as root) only -------
-if [ -s /etc/panda/soloist.key ]; then
+# board.conf SPOTIFY=no (no Soloist build for this arch): the service is left out.
+soloist=speaker-soloist
+if [ "${SPOTIFY:-yes}" = no ]; then
+	soloist=""
+	rc-update del speaker-soloist default >/dev/null 2>&1 || true
+elif [ -s /etc/panda/soloist.key ]; then
 	chown root:root /etc/panda/soloist.key && chmod 0600 /etc/panda/soloist.key
 else
 	log "no /etc/panda/soloist.key: Soloist won't start (set it on the web page)"
@@ -146,7 +151,7 @@ for svc in panda-setup panda-ota-boot panda-firewall panda-reset-button; do
 	rc-update add "$svc" boot >/dev/null 2>&1 || true
 done
 [ -e "${WATCHDOG_DEV:-/dev/watchdog}" ] && rc-update add watchdog boot >/dev/null 2>&1 || true
-for svc in panda-audio-init speaker-pipewire speaker-wireplumber speaker-soloist \
+for svc in panda-audio-init speaker-pipewire speaker-wireplumber $soloist \
 	speaker-shairport speaker-radio speaker-arbiter panda-radio-init bluetooth panda-bt \
 	panda-wifi panda-chime-boot panda-web panda-ota-confirm crond; do
 	rc-update add "$svc" default >/dev/null 2>&1 || true

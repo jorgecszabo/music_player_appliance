@@ -104,6 +104,15 @@ def shell_conf(path):
     return out
 
 
+# board.conf SPOTIFY=no: the board has no Soloist build, so no Spotify service,
+# log, key or status.
+SPOTIFY = shell_conf("/etc/panda/board.conf").get("SPOTIFY", "yes") != "no"
+if not SPOTIFY:
+    SERVICES.remove("speaker-soloist")
+    RESTARTABLE.discard("speaker-soloist")
+    LOGS.remove("soloist")
+
+
 def bt_call(req, timeout=5, sock=BT_SOCK, name="panda-bt"):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -368,7 +377,9 @@ class Collector:
         # (name, period in s), cheapest first.
         self.probes = [("services", 15, self.services), ("net", 10, self.net),
                        ("pwtop", 10, self.pwtop), ("lbu", 15, self.lbu), ("sync", 30, self.sync),
-                       ("spotify", 30, self.spotify), ("ota", 60, self.ota)]
+                       ("ota", 60, self.ota)]
+        if SPOTIFY:
+            self.probes.insert(-1, ("spotify", 30, self.spotify))
 
     def active(self):
         return time.monotonic() < self.active_until
@@ -486,6 +497,7 @@ class Collector:
             "board_name": board.get("BOARD_NAME", ""),
             "board_blurb": board.get("BOARD_BLURB", ""),
             "board_badge": board.get("BOARD_BADGE", ""),
+            "spotify": SPOTIFY,
             "bt_controller": board.get("BT_DESCRIPTION", ""),
             "kernel": os.uname().release,
             "alpine": read("/etc/alpine-release").strip(),
@@ -1175,6 +1187,8 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True}
 
     def spotify_key(self, req):
+        if not SPOTIFY:
+            raise ValueError("Spotify isn't available on this board")
         key = str(req.get("key", "")).strip()
         if not re.fullmatch(r"[A-Za-z0-9_.-]{16,200}", key):
             raise ValueError("that doesn't look like an API key")

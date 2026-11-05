@@ -67,7 +67,7 @@
     </div>
     <table class="grid" id="streams">
       <thead><tr><th>Source</th><th>Format</th><th>State</th><th>Xruns</th></tr></thead>
-      <tbody><tr><td colspan="4" class="center">Nothing is playing. Pick &quot;<span class="sn">Panda</span>&quot; in Spotify, AirPlay or Bluetooth.</td></tr></tbody>
+      <tbody><tr><td colspan="4" class="center">Nothing is playing. Pick &quot;<span class="sn">Panda</span>&quot; in <span class="src-list">Spotify, AirPlay or Bluetooth</span>.</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -263,7 +263,7 @@
     <div class="button-row left">
       <label for="log-name">Log:</label>
       <select id="log-name">
-        <option>soloist</option><option>shairport</option><option>radio</option><option>arbiter</option><option>panda-bt</option><option>panda-wifi</option>
+        <option id="log-soloist">soloist</option><option>shairport</option><option>radio</option><option>arbiter</option><option>panda-bt</option><option>panda-wifi</option>
         <option>pipewire</option><option>wireplumber</option><option>panda-web</option>
         <option>panda-web-admin</option><option>messages</option>
       </select>
@@ -282,9 +282,9 @@
         <input type="text" class="field" id="name-input" maxlength="32" autocomplete="off" aria-label="Speaker name">
         <button class="btn" type="submit">Apply</button>
       </form>
-      <p class="small">Shown in Spotify, AirPlay and Bluetooth. Renaming restarts those services (about 30 s).</p>
+      <p class="small">Shown in <span id="name-where">Spotify, AirPlay and Bluetooth</span>. Renaming restarts those services (about 30 s).</p>
     </fieldset>
-    <fieldset class="group">
+    <fieldset class="group" id="spotify-group">
       <legend>Spotify Connect</legend>
       <p id="spotify-text">Checking the API key...</p>
       <form id="key-form" class="button-row left">

@@ -623,7 +623,9 @@ class Collector:
         return res
 
     def audio(self):
-        self.board_card = shell_conf("/etc/panda/board.conf").get("AUDIO_CARD") or None
+        board = shell_conf("/etc/panda/board.conf")
+        # PipeWire's api.alsa.card.name: the card's name, usually its id (AUDIO_CARD).
+        self.board_card = board.get("AUDIO_CARD_NAME") or board.get("AUDIO_CARD") or None
         top = self.slow.get("pwtop") or {}
         sink, streams, outputs = None, [], []
         for o in PW.nodes():

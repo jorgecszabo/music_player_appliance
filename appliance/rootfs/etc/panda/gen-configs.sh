@@ -17,6 +17,9 @@ HERE="$(dirname "$(readlink -f "$0")")"
 [ -f "$CONF_DIR"/audio.conf ] && . "$CONF_DIR"/audio.conf
 # A board without an onboard output (USB audio only) leaves AUDIO_CARD empty.
 AUDIO_CARD="${AUDIO_CARD:-}"
+# PipeWire matches cards by the ALSA card name (api.alsa.card.name), which is
+# usually the id too; board.conf AUDIO_CARD_NAME when it isn't.
+AUDIO_CARD_NAME="${AUDIO_CARD_NAME:-$AUDIO_CARD}"
 
 # --- Defaults for boards that don't set these --------------------------------------
 # Graph quantum (frames). Big = robust; latency doesn't matter for a speaker.
@@ -118,7 +121,7 @@ monitor.bluez.rules = [
 monitor.alsa.rules = [
   {
     # The board's own card and USB audio cards only; ignore the rest (e.g. HDMI).
-    matches = [ { device.name = "~alsa_card.*", api.alsa.card.name = "!$AUDIO_CARD" } ]
+    matches = [ { device.name = "~alsa_card.*", api.alsa.card.name = "!$AUDIO_CARD_NAME" } ]
     actions = { update-props = { device.disabled = true } }
   }
   {
@@ -132,7 +135,7 @@ monitor.alsa.rules = [
     # codec's hardware gain, and the hardware gain could never be a cap. (USB
     # cards: audio-route.py sets their hardware controls to 0 dB.)
     matches = [
-      { device.name = "~alsa_card.*", api.alsa.card.name = "$AUDIO_CARD" }
+      { device.name = "~alsa_card.*", api.alsa.card.name = "$AUDIO_CARD_NAME" }
       { device.name = "~alsa_card.*", device.bus = "usb" }
     ]
     actions = { update-props = { api.alsa.soft-mixer = true } }
@@ -145,7 +148,7 @@ monitor.alsa.rules = [
   {
     # The board's own output: fixed format and codec quirks. USB outputs keep
     # their defaults (PipeWire resamples to whatever rate the card supports).
-    matches = [ { node.name = "~alsa_output.*", api.alsa.card.name = "$AUDIO_CARD" } ]
+    matches = [ { node.name = "~alsa_output.*", api.alsa.card.name = "$AUDIO_CARD_NAME" } ]
     actions = {
       update-props = {
         ${AUDIO_RATE:+audio.rate = $AUDIO_RATE}

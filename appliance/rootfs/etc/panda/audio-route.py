@@ -186,11 +186,11 @@ def main():
     # Output mode first: a profile switch recreates the card's nodes (the
     # arbiter sees them and runs this again).
     changed = [set_profile(d, audio.get("USB_PROFILE", "auto"))
-               for d in usb_devices(ds, board.get("AUDIO_CARD"))]
+               for d in usb_devices(ds, board.get("AUDIO_CARD_NAME") or board.get("AUDIO_CARD"))]
     if any(changed):
         return 0
     eq = next((n for n in ns if n["props"].get("node.name") == EQ_OUTPUT), None)
-    usb = usb_outputs(ns, board.get("AUDIO_CARD"))
+    usb = usb_outputs(ns, board.get("AUDIO_CARD_NAME") or board.get("AUDIO_CARD"))
 
     if "--master" in sys.argv[1:]:
         sink = next((n for n in ns if n["props"].get("node.name") == "panda-eq"), None)

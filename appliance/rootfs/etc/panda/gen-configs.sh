@@ -167,7 +167,11 @@ general = {
 	// it). Avoids the pipewire-alsa plugin and its jittery delay reports.
 	output_backend = "pipewire";
 	mdns_backend = "avahi";
-	interpolation = "basic";
+	// Sync corrections (a frame more or fewer per packet, hundreds of times a
+	// minute): "basic" inserts/drops a single sample, an audible click each
+	// (faint crackle); "soxr" left transients at packet edges (worse). "vernier"
+	// recodes the whole packet: clean on a 1 kHz tone at 700-900 ppm.
+	interpolation = "vernier";
 };
 sessioncontrol = {
 	// A guest's iPhone can take over from another AirPlay sender.

@@ -176,6 +176,15 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   signal) are shairport's sync corrections; inaudible. Receiver-side knobs (interpolation soxr,
   drift tolerance 10/25 ms, disable_synchronization, ignore_volume_control) made no difference,
   so the config stays at the defaults (`interpolation = "basic"`).
+- **Correction (2026-11-05): the sync corrections were audible** (faint crackle on AirPlay only,
+  over Wi-Fi and Ethernet). Shairport stats: 0 missing/late packets, but "All Sync PPM" 700-1400
+  with the net flipping sign (hunting: delay-measurement jitter 2-3 ms vs the 2 ms drift
+  tolerance). With `basic` each correction drops/repeats one sample: on a 1 kHz tone, periods of
+  43.1 instead of 44.1 samples, residual up to -25 dB re signal. Click energy above 1.5 kHz per
+  10 ms block (share of blocks > -60 dB re signal): basic + 10 ms tolerance 2.9%, soxr 12.8%,
+  vernier (5.x, default 2 ms tolerance, constant corrections) 0.4%, all of it at stream start/stop.
+  Now `interpolation = "vernier"`. Open: the timing estimate jumps 3-9 ms when a few packets
+  from Fedora arrive late (resend requests); that's what keeps it correcting.
   If the owner still hears chops: test again (the gain/clipping fixes may have been it); else
   look at the network path (UDP `RcvbufErrors` was 73 at one point, 0 during tests).
 - **Delay: set by the sender.** shairport logs "New latency: 66150" frames (1.5 s) requested by

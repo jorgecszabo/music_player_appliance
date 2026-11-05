@@ -1,0 +1,40 @@
+# Audio spectrum for the front panel (panda-lcd): pw-cat records the output's
+# monitor, a 256-point fixed-point FFT (kissfft, FIXED_POINT=16, vendored:
+# kiss_fft.c and headers from kissfft 131.1.0, BSD-3-Clause) turns it into 24
+# bands. Integer only per frame: the Raspberry Pi 1's ARM1176 has no NEON.
+# check() runs the tone self-test and fails if objdump finds float
+# instructions in analyze() or the FFT.
+pkgname=panda-spectrum
+pkgver=1.0
+pkgrel=0
+pkgdesc="Audio spectrum (fixed-point FFT) for the panda front panel"
+url="https://localhost/panda"
+arch="all"
+license="GPL-2.0-only AND BSD-3-Clause"
+depends="pipewire-tools"
+source="panda-spectrum.c kiss_fft.c kiss_fft.h _kiss_fft_guts.h kiss_fft_log.h COPYING.kissfft"
+builddir="$srcdir"
+
+build() {
+	# -O2 over abuild's -Os: the butterflies are the hot loop.
+	${CC:-gcc} $CFLAGS -O2 -Wall -Wextra -DFIXED_POINT=16 $LDFLAGS \
+		-o panda-spectrum panda-spectrum.c kiss_fft.c -lm
+}
+
+check() {
+	./panda-spectrum --selftest
+	# No floating point in the per-frame code (VFP float ops would mean a
+	# float build of kissfft, or a stray double in analyze()).
+	objdump -d panda-spectrum | awk '
+		/^[0-9a-f]+ <[^>]+>:$/ { fn = $2; if (fn ~ /^<(analyze|kiss_fft_stride|kf_work|kf_bfly[0-9a-z_]*)>:$/) seen++ }
+		fn ~ /^<(analyze|kiss_fft_stride|kf_work|kf_bfly[0-9a-z_]*)>:$/ &&
+			/\tv(add|sub|mul|mla|mls|nmul|nmla|div|sqrt|cvt|neg|abs|cmp)[a-z]*\.f(32|64)/ { print "float: " fn " " $0; bad = 1 }
+		END { if (seen < 2) { print "analyze/kiss_fft_stride not found"; exit 1 } exit bad }'
+}
+
+package() {
+	install -Dm755 panda-spectrum "$pkgdir"/usr/libexec/panda/panda-spectrum
+	install -Dm644 COPYING.kissfft "$pkgdir"/usr/share/licenses/$pkgname/COPYING.kissfft
+}
+
+sha512sums=""

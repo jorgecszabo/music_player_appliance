@@ -654,23 +654,29 @@ class Calibration:
 
 # --- spectrum (panda-spectrum) ----------------------------------------------------------
 class Spectrum:
-    """Starts panda-spectrum while wanted; it prints 24 bytes (bands, 0-255) per frame."""
+    """Runs panda-spectrum while wanted, at the output's rate (so PipeWire doesn't
+    resample) on the master sink's monitor; it prints 24 bytes (bands, 0-255) per frame."""
 
     BANDS = 24
 
     def __init__(self, cb):
         self.cb = cb
         self.proc = None
+        self.args = None
         self.bands = bytes(self.BANDS)
         self.lock = threading.Lock()
         self.available = os.access(SPECTRUM, os.X_OK)
 
-    def want(self, on):
+    def want(self, on, rate=None, target=None):
+        args = [SPECTRUM, str(int(rate or 48000)), target or "panda-eq"]
+        if on and self.proc is not None and args != self.args:
+            self.want(False)               # the rate or the sink changed
         with self.lock:
             if on and self.proc is None and self.available:
                 env = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
+                self.args = args
                 try:
-                    self.proc = subprocess.Popen([SPECTRUM], stdout=subprocess.PIPE,
+                    self.proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                                  stderr=subprocess.DEVNULL, env=env)
                 except OSError as e:
                     log("spectrum:", e)
@@ -742,6 +748,7 @@ class Panel:
         self.stars = [[(i * 7919 % 200 - 100) / 100, (i * 104729 % 200 - 100) / 100, (i * 31 % 97) / 97 + 0.03,
                        i % 17 == 0] for i in range(60)]
         self.spectrum = Spectrum(lambda: self.q.put(("spectrum",)))
+        self.spectrum_errs = None
         self.input = None
         if not self.cal.ok and board.get("LCD_TOUCH_NAME") and not test:
             self.screen = "calibrate"
@@ -1518,8 +1525,20 @@ class Panel:
                 self.menu = None
                 self.screen = "saver"
         t = self.track(self.current())
+        m = self.master()
+        # Kill switch: audio underruns while the spectrum runs turn it off until restart.
+        errs = m.get("errors")
+        if self.spectrum.proc is None:
+            self.spectrum_errs = None
+        elif errs is not None:
+            if self.spectrum_errs is None:
+                self.spectrum_errs = errs
+            elif errs > self.spectrum_errs:
+                log(f"output xruns went up ({self.spectrum_errs} -> {errs}) with the spectrum on: turning it off")
+                self.spectrum.want(False)
+                self.spectrum.available = False
         self.spectrum.want(self.backlight.on and self.screen == "now" and not self.dialog
-                           and bool(t["source"]) and bool(t["playing"]))
+                           and bool(t["source"]) and bool(t["playing"]), m.get("rate"), m.get("name"))
 
     # --- main loop -------------------------------------------------------------------------------
     def frame(self):

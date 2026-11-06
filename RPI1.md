@@ -30,13 +30,20 @@ Unattended tasks 1-8 are done and committed; the spikes and B1-B6 need the board
 Built so far: U-Boot for rpi1 and the armhf build container; the forks and the image
 are next (see the log). Where the build differs from the plan below:
 
-- **Device tree: the firmware's, not ours.** U-Boot passes the device tree the GPU firmware
-  built (extlinux without an FDT line = `$fdt_addr`; checked in U-Boot's `boot/pxe_utils.c`),
+- **No U-Boot (changed 2026-11-06, after the first boot on the board).** U-Boot started, but
+  its bootflow never found extlinux on the real card (sdhost; QEMU's card was on sdhci), and
+  its HDMI simplefb moved the TFT to fb2. Now the GPU firmware boots Linux itself:
+  `config.txt` includes `slot.txt` (`os_prefix=slots/<x>/`, `kernel=`, `initramfs`), and the
+  firmware loads the kernel, initramfs, `cmdline.txt`, DTBs and overlays from that slot.
+  panda-ota.py has a second boot scheme for it (`OTA_BOOT_SCHEME=rpi`): it writes `slot.txt`
+  and each slot's `cmdline.txt` from the slot's `extlinux.label`. scripts/test-ota.sh passes
+  (20/20) for rpi1 and still for the three extlinux boards.
+- **Device tree: the firmware's, not ours.** The GPU firmware builds the device tree,
   so `config.txt` loads the stock `pitft28-resistive` overlay (its defaults are already
   landscape, 32 MHz, 25 fps, with the backlight on STMPE GPIO 2) and our `panda-keys`
   overlay (the 4 buttons as one `gpio-keys` device). No `rpi1-tft.dts`, no FDTOVERLAYS.
-  The firmware's fixups (MAC, memory) stay. DTBs, overlays and `config.txt` live in the
-  FAT root, outside the OTA slots.
+  The firmware's fixups (MAC, memory) stay. The DTBs and overlays are in each slot, so they
+  update with the kernel; `config.txt` and the firmware stay in the FAT root.
 - **`gpu_mem=32`** with the full `start.elf`, not 16 and the cut-down firmware: untested with
   the jack's VCHIQ audio. Lower it after B3 if the jack works with 16.
 - **Pairing is Just Works** (panda-bt's agent): the panel shows a countdown, not a PIN.
@@ -289,3 +296,14 @@ says "hold S2" on every board.
   in the script: SD on sdhci instead of sdhost (with mmc0 only), PM block disabled (QEMU lacks
   its power-domain registers: bcm2835-power oopses), and u-boot.bin wrapped in a uImage header
   (QEMU loads raw images at 0x10000, the firmware at 0x8000). Next: a real card (B2).
+
+- 2026-11-06: first boot on the board (no UART; HDMI + TFT). U-Boot stopped at its prompt
+  ("No EFI system partition", extlinux not found); booted by hand with load + bootz, then a
+  bootcmd in uboot.env. Seen: TFT is `fb_ili9340` (fb2 behind U-Boot's simplefb), touch module
+  `stmpe_ts` has no OF alias (not autoloaded), jack card id `Headphones` / name `bcm2835
+  Headphones`, sink `alsa_output.platform-2000b840.mailbox.stereo-fallback`, PCM at -20 dB by
+  default (faint audio; 0 dB fixed it), overclock active (1 GHz). Panel: 386 ms per frame,
+  bars at ~2 fps -> glyph/string cache and partial updates: ~21% CPU while playing, about a
+  third of the CPU idle with radio + panel + spectrum. Fixed live (deploy.sh): LCD_FB by
+  driver name, LCD_MODULES=stmpe-ts, the panel's speed, backlight on at start, the kill
+  switch (it fired on one xrun). Then the switch to firmware boot and a new card.

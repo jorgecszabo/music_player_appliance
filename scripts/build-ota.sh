@@ -36,7 +36,8 @@ for root, dirs, names in os.walk(slot):
         full = os.path.join(root, n)
         rel = os.path.relpath(full, slot)
         # Per-device files that a slot gets on the card, never from a bundle.
-        if rel in ("slot.json", "settings.apkovl.tar.gz") or rel.startswith("."):
+        # cmdline.txt: written by the device for the slot it lands in (rpi scheme).
+        if rel in ("slot.json", "settings.apkovl.tar.gz", "cmdline.txt") or rel.startswith("."):
             continue
         h = hashlib.sha256()
         with open(full, "rb") as f:

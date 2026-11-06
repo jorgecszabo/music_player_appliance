@@ -13,15 +13,13 @@
 # Layout: MBR (the Pi 1 boot ROM reads only a DOS label), p1 = FAT32 (LBA, type
 # 0x0c), boot flag, 512 MiB starting at 4 MiB (sector 8192), the same partition
 # as the other boards. Nothing raw: the boot ROM loads bootcode.bin from the
-# FAT partition, and the staging files carry the GPU firmware, config.txt,
-# the DTBs and overlays (mkimg.rpi1.sh). This script adds u-boot.bin, which
-# config.txt starts as the "kernel"; U-Boot finds extlinux by distro boot.
-# UBOOT_DIR=<dir> selects another U-Boot build (default build/u-boot-out/<board>).
+# FAT partition, and the staging files carry everything else: the GPU firmware,
+# config.txt and slot.txt in the root, the kernel, initramfs, cmdline.txt, DTBs
+# and overlays in slots/a (mkimg.rpi1.sh, build-image.sh). No bootloader of ours.
 # A report is written to build/sdcard-report.txt (card) or <file>.report.txt (image).
 set -euo pipefail
 : "${BOARD:?run boards/<board>/write-sdcard.sh}"
 source "$(dirname "$0")/env.sh"
-UBOOT_BIN=u-boot.bin
 PART_SECTOR=8192       # 4 MiB
 PART_MIB=512
 
@@ -33,12 +31,11 @@ else
     DEV="${1:?usage: $0 /dev/sdX [staging-dir] | --image <file.img> [staging-dir]}"
     STAGE="${2:-}"
 fi
-UBOOT_OUT="$(realpath "${UBOOT_DIR:-$PROJECT_DIR/build/u-boot-out/$BOARD}")"
-[ -f "$UBOOT_OUT/$UBOOT_BIN" ] || { echo "missing $UBOOT_OUT/$UBOOT_BIN, run BOARD=$BOARD scripts/build-u-boot.sh"; exit 1; }
 [ -z "$STAGE" ] || [ -d "$STAGE" ] || { echo "$STAGE is not a directory"; exit 1; }
 # Without the firmware and config.txt the card doesn't boot at all.
 if [ -n "$STAGE" ]; then
-    for f in bootcode.bin start.elf fixup.dat config.txt; do
+    for f in bootcode.bin start.elf fixup.dat config.txt slot.txt \
+            slots/a/cmdline.txt slots/a/bcm2708-rpi-b.dtb slots/a/overlays/panda-keys.dtbo; do
         [ -f "$STAGE/$f" ] || { echo "$STAGE has no $f (build-image.sh for BOARD=$BOARD)"; exit 1; }
     done
 fi
@@ -55,7 +52,6 @@ SFDISK
 }
 report_common() {  # <device or file>
     sfdisk -d "$1"
-    grep -a -m1 -o "U-Boot 20[0-9.]*[^ ]*" "$UBOOT_OUT/$UBOOT_BIN"
 }
 
 # --- Image file (no root): sfdisk on the file, mkfs/mtools at the offset ----
@@ -76,12 +72,11 @@ if [ -n "$IMAGE" ]; then
         shopt -u dotglob nullglob
         [ ${#entries[@]} -eq 0 ] || mcopy -s -Q -i "$FAT" "${entries[@]}" ::/
     fi
-    mcopy -Q -o -i "$FAT" "$UBOOT_OUT/$UBOOT_BIN" ::/"$UBOOT_BIN"
     REPORT="$IMAGE.report.txt"
     {
-        echo "# $(date -Is) $IMAGE  UBOOT_DIR=$UBOOT_OUT"
+        echo "# $(date -Is) $IMAGE"
         report_common "$IMAGE"
-        mcopy -Q -i "$FAT" ::/"$UBOOT_BIN" - | cmp - "$UBOOT_OUT/$UBOOT_BIN" && echo "FAT $UBOOT_BIN: matches"
+        mtype -i "$FAT" ::/slot.txt
         minfo -i "$FAT" :: | grep -E "^(disk type|sectors per cluster|big size|volume label)" || true
         mdir -i "$FAT" -a ::/
     } > "$REPORT" 2>&1
@@ -127,19 +122,18 @@ MNT=$(mktemp -d)
 trap 'umount "$MNT" 2>/dev/null; rmdir "$MNT"' EXIT
 mount "$PART" "$MNT"
 [ -z "$STAGE" ] || cp -r "$STAGE"/. "$MNT"/
-cp "$UBOOT_OUT/$UBOOT_BIN" "$MNT/$UBOOT_BIN"
 sync
 umount "$MNT"
 
 # Report: read everything back and compare.
 REPORT="$PROJECT_DIR/build/sdcard-report.txt"
 {
-    echo "# $(date -Is) $DEV  UBOOT_DIR=$UBOOT_OUT"
+    echo "# $(date -Is) $DEV"
     report_common "$DEV"
     blkid "$PART"
     fsck.fat -n -v "$PART" 2>&1 | head -20 || true
     mount -o ro "$PART" "$MNT"
-    cmp "$UBOOT_OUT/$UBOOT_BIN" "$MNT/$UBOOT_BIN" && echo "FAT $UBOOT_BIN: matches"
+    cat "$MNT/slot.txt"
     ls -la --time-style=+ "$MNT"
     umount "$MNT"
 } > "$REPORT" 2>&1

@@ -22,7 +22,14 @@ ok() { echo "PASS: $*"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $*"; fail=$((fail + 1)); }
 check() { local what="$1"; shift; if "$@"; then ok "$what"; else bad "$what"; fi; }
 state() { tr '\n' ' ' < "$T/media/slots/state"; }
-default() { sed -n 's/^DEFAULT //p' "$T/media/extlinux/extlinux.conf"; }
+# The slot the bootloader would boot, and the boot entry of slot $1 (per scheme).
+if [ "${OTA_BOOT_SCHEME:-extlinux}" = rpi ]; then
+    default() { sed -n 's|^os_prefix=slots/\(.\)/$|\1|p' "$T/media/slot.txt"; }
+    entry() { cat "$T/media/slots/$1/cmdline.txt" 2>/dev/null; }
+else
+    default() { sed -n 's/^DEFAULT //p' "$T/media/extlinux/extlinux.conf"; }
+    entry() { sed -n "/^LABEL $1\$/,/^LABEL /p" "$T/media/extlinux/extlinux.conf"; }
+fi
 # Keys for the test: only the abuild public key (not the private one).
 mkdir -p "$T/keys"; cp "$PROJECT_DIR"/keys/*.rsa.pub "$T/keys/"; export PANDA_OTA_KEYS="$T/keys"
 
@@ -66,8 +73,8 @@ if PANDA_OTA_BOARD_CONF="$T/other.conf" ota install < "$BUNDLE" >"$T/out" 2>&1; 
 ota install < "$BUNDLE" > "$T/out" 2>&1 || { cat "$T/out"; bad install; }
 check "install: slot b complete" test -f "$T/media/slots/b/slot.json"
 check "install: default stays a" test "$(default)" = a
-check "install: menu lists slot b" grep -q "^LABEL b" "$T/media/extlinux/extlinux.conf"
-check "install: slot b boots its own modloop/repo" grep -q "modloop=/slots/b/boot/modloop-.* alpine_repo=/media/${BOOT_MEDIA}/slots/b/apks panda_slot=b" "$T/media/extlinux/extlinux.conf"
+check "install: slot b has a boot entry" test -n "$(entry b)"
+check "install: slot b boots its own modloop/repo" sh -c 'echo "$1" | grep -q "modloop=/slots/b/boot/modloop-.* alpine_repo=/media/$2/slots/b/apks panda_slot=b"' _ "$(entry b)" "$BOOT_MEDIA"
 ota activate > /dev/null 2>&1
 check "activate: default b, state trial=b" test "$(default) $(state)" = "b confirmed=a trial=b "
 check "activate: settings snapshot in slot a" cmp -s "$T/media/panda.apkovl.tar.gz" "$T/media/slots/a/settings.apkovl.tar.gz"

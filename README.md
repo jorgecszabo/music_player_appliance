@@ -33,11 +33,11 @@ AirPlay, Bluetooth and internet radio. It's published as is:
 | `pcduino` | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
 | `rpi1` (bring-up, untested) | Raspberry Pi 1 Model B rev 2 + 2.8" TFT | BCM2835 (ARM1176, 1 GHz OC), **armhf** | Alpine's `linux-rpi` | PWM 3.5 mm jack, or USB audio | none onboard: USB dongles; no Spotify (ARMv6) |
 
-All boot from an SD card through U-Boot v2024.07. The OMAP boards use MLO +
-`u-boot.img` and a serial console on `ttyS2`; the pcDuino uses
-`u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0` (the debug header); the
-Pi's GPU firmware starts `u-boot.bin` from the FAT partition (`config.txt`),
-console `ttyAMA0`. All at 115200 8N1. Each board's `board.conf` describes its
+The OMAP boards and the pcDuino boot from an SD card through U-Boot v2024.07:
+MLO + `u-boot.img` and a serial console on `ttyS2` (OMAP), or
+`u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0`, the debug header
+(pcDuino). The Pi needs no U-Boot: its GPU firmware boots Linux from the OTA
+slot that `slot.txt` names (`config.txt` includes it), console `ttyAMA0`. All at 115200 8N1. Each board's `board.conf` describes its
 hardware in detail; the pcDuino's bring-up status is in [PCDUINO.md](PCDUINO.md),
 the Pi's (and its Win98-style front panel, `panda-lcd`) in [RPI1.md](RPI1.md). To add a board, see [Porting](#porting-the-appliance-to-another-board).
 
@@ -63,7 +63,7 @@ scripts/build-soloist-runtime.sh                 # glibc runtime for Spotify Sol
 scripts/build-package.sh panda-spectrum          # front panel spectrum (boards with LCD_FB)
 
 # Per board
-scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu
+scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu (not rpi1)
 scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min; not
                                                  #   rpi1: it uses Alpine's linux-rpi)
 scripts/build-image.sh                           # -> build/sdimage/$BOARD/

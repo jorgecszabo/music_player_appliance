@@ -1,20 +1,22 @@
 #!/bin/bash
 # Smoke-boot the rpi1 card image in QEMU (no hardware, no root): QEMU's
 # "raspi1ap" machine emulates the BCM2835 (UART0, timers, SD host, DWC2 USB,
-# 512 MB). There's no GPU firmware in QEMU, so this script plays its part:
-# it applies config.txt's overlays to the DTB (fdtoverlay, as the firmware
-# would) and has QEMU load u-boot.bin at 0x8000 with the DTB in r2, which is
-# how the firmware starts it. From there it's the card's own boot: U-Boot,
-# extlinux (the OTA slots), linux-rpi, initramfs, modloop, apkovl, OpenRC.
-# What it can't tell: the overclock, the jack, the TFT/touch/buttons (no SPI
-# devices), the Model B's USB Ethernet, the watchdog reset, real timing.
+# 512 MB). There's no GPU firmware in QEMU, so this script plays its part, as
+# config.txt + slot.txt tell the firmware: the kernel, initramfs, cmdline.txt
+# and DTB of the slot in slot.txt, with config.txt's overlays applied
+# (fdtoverlay). From there it's the card's own boot: initramfs, modloop,
+# apkovl, packages, OpenRC. What it can't tell: os_prefix itself (the real
+# firmware), the overclock, the jack, the TFT/touch/buttons (no SPI devices),
+# the Model B's USB Ethernet, the watchdog reset, real timing.
 # Networking: a QEMU usb-net device (shows up as usb0, not eth0).
 #
 # Usage: scripts/qemu-rpi1.sh [seconds]   (default: until QEMU exits; Ctrl-A X quits)
 #   Builds build/qemu-rpi1/card.img from build/sdimage/rpi1 with the card
 #   writer's image mode (padded to 1 GiB: QEMU wants a power-of-2 SD size), and
-#   logs the serial console to build/qemu-rpi1/boot.log. Forwards
-#   localhost:2222 -> SSH, :8080 -> web page. KEEP=1 reuses the card.img.
+#   logs the serial console to build/qemu-rpi1/boot.log (serial is put last on
+#   the command line, so OpenRC's output lands there too; on the board it goes
+#   to the TFT). Forwards localhost:2222 -> SSH, :8080 -> web page.
+#   KEEP=1 reuses the card.img.
 set -euo pipefail
 export BOARD=rpi1
 source "$(dirname "$0")/env.sh"
@@ -30,17 +32,18 @@ if [ -z "${KEEP:-}" ] || [ ! -f "$OUT/card.img" ]; then
     "$BOARD_DIR/write-sdcard.sh" --image "$OUT/card.img" "$SD" >/dev/null
     truncate -s 1G "$OUT/card.img"
 fi
-# QEMU loads a raw -kernel image at 0x10000, the firmware puts u-boot.bin at
-# 0x8000 (its link address): a uImage header tells QEMU where it goes.
-UB="$PROJECT_DIR/build/u-boot-out/$BOARD"
-"$UB/tools/mkimage" -q -A arm -O linux -T kernel -C none -a 0x8000 -e 0x8000 -n u-boot \
-    -d "$UB/u-boot.bin" "$OUT/u-boot.uimg"
+# The firmware's part, from the slot that slot.txt names.
+SLOT=$(sed -n 's|^os_prefix=\(slots/[ab]\)/$|\1|p' "$SD/slot.txt")
+[ -n "$SLOT" ] || { echo "no os_prefix in $SD/slot.txt"; exit 1; }
+cp "$SD/$SLOT/boot/vmlinuz-rpi" "$SD/$SLOT/boot/initramfs-rpi" "$OUT/"
+# Serial last: /dev/console, so OpenRC's output reaches boot.log.
+APPEND=$(sed 's/console=tty1 //; s/^/console=tty1 /' "$SD/$SLOT/cmdline.txt")
 # The firmware's part: the Model B rev 2 DTB with config.txt's overlays.
 overlays=$(sed -n 's/^dtoverlay=\([^,]*\).*/\1/p' "$SD/config.txt")
 args=()
-for o in $overlays; do args+=("/sd/overlays/$o.dtbo"); done
+for o in $overlays; do args+=("/sd/$SLOT/overlays/$o.dtbo"); done
 podman run --rm -v "$SD:/sd:ro,z" -v "$OUT:/q:z" "$IMAGE" \
-    fdtoverlay -i /sd/bcm2708-rpi-b.dtb -o /q/rpi.dtb "${args[@]}"
+    fdtoverlay -i "/sd/$SLOT/bcm2708-rpi-b.dtb" -o /q/rpi.dtb "${args[@]}"
 # QEMU wires its SD card to the SoC's other controller (sdhci at 0x7e300000), the
 # Model B's tree enables sdhost (0x7e202000): swap them in QEMU's copy only.
 podman run --rm -v "$OUT:/q:z" "$IMAGE" sh -euc '
@@ -55,7 +58,7 @@ echo "device tree: bcm2708-rpi-b.dtb + $overlays (QEMU: SD on sdhci, no PM block
 
 rm -f "$OUT/boot.log"
 run=(qemu-system-arm -M raspi1ap -m 512
-     -kernel /q/u-boot.uimg -dtb /q/rpi.dtb
+     -kernel /q/vmlinuz-rpi -initrd /q/initramfs-rpi -dtb /q/rpi.dtb -append "$APPEND"
      -drive if=sd,format=raw,file=/q/card.img
      -device usb-net,netdev=n
      -netdev user,id=n,hostfwd=tcp:0.0.0.0:2222-:22,hostfwd=tcp:0.0.0.0:8080-:80)

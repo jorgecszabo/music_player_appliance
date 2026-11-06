@@ -93,6 +93,12 @@ mkdir -p "$SLOT"
 mv "$SD/boot" "$SD/apks" "$SLOT/"
 rm -f "$SLOT/apks/.boot_repository"
 mv "$SD/extlinux/extlinux.conf" "$SLOT/extlinux.label"
+# - Raspberry Pi firmware boot (board.conf OTA_BOOT_SCHEME=rpi): the DTBs and
+#   overlays belong to the kernel, so they go into the slot (os_prefix).
+if [ "${OTA_BOOT_SCHEME:-extlinux}" = rpi ]; then
+    mv "$SD"/*.dtb "$SD/overlays" "$SLOT/"
+    rmdir "$SD/extlinux" 2>/dev/null || true
+fi
 # - factory overlay: a factory reset restores it (lbu overwrites the original);
 #   this version's copy also goes into the slot (and into OTA bundles)
 mkdir -p "$SD/factory"; cp "$SD/$HOST.apkovl.tar.gz" "$SD/factory/$HOST.apkovl.tar.gz"
@@ -116,6 +122,10 @@ PANDA_OTA_TEST=1 PANDA_OTA_MEDIA="$SD" PANDA_OTA_BOARD_CONF="$BOARD_DIR/board.co
     PANDA_OTA_CMDLINE_FILE=/dev/null \
     python3 -I "$APPLIANCE_DIR/rootfs/etc/panda/panda-ota.py" write-boot
 rm -f "$SD/.media.lock"
-cat "$SD/extlinux/extlinux.conf"
+if [ "${OTA_BOOT_SCHEME:-extlinux}" = rpi ]; then
+    cat "$SD/slot.txt" "$SLOT/cmdline.txt"
+else
+    cat "$SD/extlinux/extlinux.conf"
+fi
 ls -la "$SD" "$SLOT" "$SLOT/boot"
 du -sh "$SD"

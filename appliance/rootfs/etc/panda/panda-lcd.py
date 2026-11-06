@@ -1676,18 +1676,37 @@ def render_test(outdir):
     print(f"wrote {len(os.listdir(outdir))} files to {outdir}")
 
 
+def find_fb(want):
+    """LCD_FB: a device (/dev/fb1) or a framebuffer driver name (fb_ili9340), since
+    the number depends on what registered first (U-Boot's simplefb on HDMI, ...)."""
+    if want.startswith("/dev/"):
+        return want if os.path.exists(want) else None
+    for d in sorted(os.listdir("/sys/class/graphics")):
+        try:
+            if d.startswith("fb") and open(f"/sys/class/graphics/{d}/name").read().strip() == want:
+                return f"/dev/{d}" if os.path.exists(f"/dev/{d}") else None
+        except OSError:
+            pass
+    return None
+
+
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--render-test":
         render_test(sys.argv[2])
         return
     board = shell_conf("/etc/panda/board.conf")
-    dev = board.get("LCD_FB")
-    if not dev:
+    want = board.get("LCD_FB")
+    if not want:
         raise SystemExit("board.conf has no LCD_FB: no front panel on this board")
+    dev = None
     for _ in range(30):                  # the fbtft module may still be loading
-        if os.path.exists(dev):
+        dev = find_fb(want)
+        if dev:
             break
         time.sleep(1)
+    if not dev:
+        raise SystemExit(f"no framebuffer {want!r} (LCD_FB)")
+    log("framebuffer:", dev, want)
     fb = Framebuffer(dev)
     panel = Panel(Fonts(), fb, Api(), board)
 

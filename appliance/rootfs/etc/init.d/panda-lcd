@@ -30,6 +30,12 @@ start_pre() {
 	checkpath --directory --owner panda-lcd:panda-lcd --mode 0755 /run/panda-lcd
 	checkpath --file --owner panda-lcd:panda-lcd --mode 0640 /var/log/panda-lcd.log
 	rm -f /run/panda-lcd/final
+	# Panel drivers that don't load by themselves (board.conf LCD_MODULES).
+	local m
+	for m in ${LCD_MODULES:-}; do
+		modprobe "$m" || ewarn "can't load $m"
+	done
+	[ -z "${LCD_MODULES:-}" ] || udevadm settle -t 5 2>/dev/null || true
 	# The framebuffer console (fbcon) off the panel: both would draw on it.
 	local vt
 	for vt in /sys/class/vtconsole/vtcon*; do

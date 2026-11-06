@@ -1678,7 +1678,10 @@ class Panel:
         # Kill switch: audio underruns while the spectrum runs turn it off until restart.
         # Not the first SPECTRUM_GRACE_S (starting it, or the panel, can cost one),
         # and not for a stray one: SPECTRUM_MAX_XRUNS.
-        errs = m.get("errors")
+        try:
+            errs = int(m.get("errors"))      # pw-top's ERR column, as text in the status
+        except (TypeError, ValueError):
+            errs = None
         if self.spectrum.proc is None:
             self.spectrum_errs = None
             self.spectrum_since = now

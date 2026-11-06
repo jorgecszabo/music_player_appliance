@@ -1,43 +1,56 @@
-# Alpine diskless audio appliance
+# Audio appliance
 
-Alpine Linux in diskless mode as a network/Bluetooth speaker. The root filesystem
-lives in RAM and the boot media stays read-only, so the power can be cut at any
-time. Board-specific parts live in `boards/<board>/`, and everything else is
-board-independent.
+A network speaker for old ARM boards. It plays Spotify Connect, AirPlay,
+Bluetooth and internet radio through the board's headphone jack or a USB DAC, and
+you control it from a web page. It runs from RAM off a read-only SD card, so you
+can pull the plug at any time.
 
-See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
+## Features
+
+Sources:
+
+- Spotify Connect. It shows up in the Spotify app on the same network.
+- AirPlay, from iPhones, Macs and Linux desktops (PipeWire's RAOP sink).
+- Bluetooth A2DP. Pair with the button or the web page; it reconnects to the last
+  phone on its own.
+- Internet radio, tuned from the web page.
+- A new stream pauses the one that was playing, so sources don't overlap.
+
+Sound:
+
+- One fixed output rate (96 kHz / 32-bit on the PandaBoard codec). Everything is
+  resampled to it, so every source takes the same path.
+- Output to the 3.5 mm jack or any USB audio device.
+- Bass and treble with headroom so boosting doesn't clip.
+- A volume cap and a fixed startup volume. One volume for all sources, synced with
+  Bluetooth, Spotify and AirPlay.
+
+System:
+
+- Settings survive power cuts.
+- Updates go into a second slot and boot on trial. If the new version fails, the
+  board falls back to the old one.
+- Wi-Fi (many USB dongles) or Ethernet, a firewall limited to the local network, a
+  hardware watchdog and a factory-reset button.
+- Chimes for boot, pairing and connect/disconnect. No speech.
+- On boards with a small TFT, a front panel with a live spectrum (see
+  [RPI1.md](RPI1.md)).
 
 ## Web control panel
 
-Every speaker serves a Windows 98-style control panel at `http://panda.local/`.
-From it you can see what's playing, tune internet radio, set the volume and tone,
-pair Bluetooth, pick a Wi-Fi network, read the logs and install updates.
+The speaker serves a Windows 98-style control panel at `http://panda.local/`. It
+shows what's playing and has the radio tuner, volume and tone, Bluetooth pairing,
+Wi-Fi setup, logs and updates.
 
 [![The web control panel](docs/panel-demo.png)](docs/panel-demo.html)
 
-To try it without a board, download [docs/panel-demo.html](docs/panel-demo.html)
-and open it in a browser. It's the real page with made-up data. Nothing in it
-talks to a speaker. `scripts/build-demo.sh` rebuilds the file and the screenshot
-after the page changes.
-
-## Status and support
-
-A hobby project to give obsolete dev boards a second life. It works for me on
-all three supported boards (PandaBoard, BeagleBoard-xM and pcDuino Lite): Spotify,
-AirPlay, Bluetooth and internet radio. It's published as is:
-
-- **No support promised.** Issues and patches get read eventually, but there's no
-  roadmap and no guaranteed answer. Requests to support another board are best
-  sent as a port (see [Porting](#porting-the-appliance-to-another-board)).
-- **Rough edges are known and listed** in PLAN.md ("Still to do"). Among them: the
-  PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet (use Ethernet or a USB
-  dongle).
-- **How it was made:** much of the code, including the r92su Wi-Fi driver port
-  ([rtl8192su](https://github.com/jorgecszabo/rtl8192su), in `drivers/`), was written with an AI assistant (Claude) and tested on the boards,
-  but not reviewed line by line. Board-specific code aims for "works in
-  practice", not for every edge case.
+You can try it without a board: download [docs/panel-demo.html](docs/panel-demo.html)
+and open it in a browser. It's the real page with made-up data and doesn't talk to
+a speaker. `scripts/build-demo.sh` rebuilds the file and the screenshot.
 
 ## Supported boards
+
+To add a board, see [Porting](#porting-the-appliance-to-another-board).
 
 | `BOARD=` | Board | SoC / Alpine arch | Kernel package | Audio out | Wi-Fi / Bluetooth |
 |---|---|---|---|---|---|
@@ -50,9 +63,9 @@ The OMAP boards and the pcDuino boot from an SD card through U-Boot v2024.07:
 MLO + `u-boot.img` and a serial console on `ttyS2` (OMAP), or
 `u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0`, the debug header
 (pcDuino). The Pi needs no U-Boot: its GPU firmware boots Linux from the OTA
-slot that `slot.txt` names (`config.txt` includes it), console `ttyAMA0`. All at 115200 8N1. Each board's `board.conf` describes its
-hardware in detail; the pcDuino's bring-up status is in [PCDUINO.md](PCDUINO.md),
-the Pi's (and its Win98-style front panel, `panda-lcd`) in [RPI1.md](RPI1.md). To add a board, see [Porting](#porting-the-appliance-to-another-board).
+slot that `slot.txt` names (`config.txt` includes it), console `ttyAMA0`. All consoles are 115200 8N1. Each board's `board.conf`
+describes its hardware. Bring-up notes: [PCDUINO.md](PCDUINO.md) for the pcDuino,
+[RPI1.md](RPI1.md) for the Pi and its front panel (`panda-lcd`).
 
 ## Build an image (Fedora host, rootless podman)
 
@@ -106,9 +119,8 @@ or drop one onto the card's boot partition (imported at boot, then deleted):
 
 Otherwise boot with Ethernet and pick a network on the web page (Network).
 
-A board directory needs a
-`board.conf` (including the U-Boot defconfig), an `mkimg.<name>.sh` profile
-and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
+A board directory needs a `board.conf` (including the U-Boot defconfig), an
+`mkimg.<name>.sh` profile and a card writer. A board kernel is an aport with a `cross-build.sh` that calls
 `scripts/cross-build-kernel.sh`; see `boards/pandaboard/aports/linux-pandaboard/`.
 That script also builds the generic out-of-tree drivers in `drivers/` (r92su:
 RTL8188SU/8191SU/8192SU USB Wi-Fi) for every board kernel; see
@@ -120,7 +132,7 @@ RTL8188SU/8191SU/8192SU USB Wi-Fi) for every board kernel; see
 
 The card holds two versions (slots A and B, `slots/<x>/` on the boot partition:
 kernel, initramfs, modules, the package repository). An update goes into the slot
-that isn't running; the other one stays untouched. Design: PLAN.md, "OTA updates".
+that isn't running; the other one stays untouched.
 
 ```sh
 scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
@@ -136,10 +148,11 @@ ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-install' < build/ota/pan
 ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-activate b'    # the slot it reported; reboots
 ```
 
-The new version starts on trial: early in its boot the boot menu goes back to the old
-slot, so a crash or a hang (watchdog) returns to the old version. Once the services and
-the web page are up (after a minute), it is kept; unhealthy for 5 minutes, it reboots
-into the old version and restores the settings from before the update. Bundles are signed
+The new version starts on trial. Early in its boot the boot menu points back at the
+old slot, so a crash or a hang (watchdog) returns to the old version. After about a
+minute, once the services and the web page are up, the new version is kept. If it
+stays unhealthy for 5 minutes, the board reboots into the old version and restores the
+settings from before the update. Bundles are signed
 with the abuild key (`keys/`) and only install on the board they were built for.
 `scripts/test-ota.sh` tests the device side on this host.
 
@@ -206,6 +219,13 @@ Steps:
    (a quiet tone, then music: no crackle, `pw-top` shows 0 errors); AirPlay; Spotify;
    Bluetooth pairing via the button + reconnect after reboot; radio; web page; watchdog
    (`kill -STOP` the busybox watchdog: the board resets); factory reset dry run.
+
+## Status
+
+A hobby project for upcycling old dev boards. It works for me on the supported
+boards. It's published as is, with no support or roadmap. Known problem: the
+PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet, so use Ethernet or a USB
+dongle.
 
 ## License
 

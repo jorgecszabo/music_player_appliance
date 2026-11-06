@@ -7,6 +7,19 @@ board-independent.
 
 See [PLAN.md](PLAN.md) for the design, decisions, hardware findings and status.
 
+## Web control panel
+
+Every speaker serves a Windows 98-style control panel at `http://panda.local/`.
+From it you can see what's playing, tune internet radio, set the volume and tone,
+pair Bluetooth, pick a Wi-Fi network, read the logs and install updates.
+
+[![The web control panel](docs/panel-demo.png)](docs/panel-demo.html)
+
+To try it without a board, download [docs/panel-demo.html](docs/panel-demo.html)
+and open it in a browser. It's the real page with made-up data. Nothing in it
+talks to a speaker. `scripts/build-demo.sh` rebuilds the file and the screenshot
+after the page changes.
+
 ## Status and support
 
 A hobby project to give obsolete dev boards a second life. It works for me on

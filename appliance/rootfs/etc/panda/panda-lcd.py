@@ -52,6 +52,7 @@ DARK_S = 600
 OSD_S = 1.5
 CRASH_S = 5
 MARQUEE_HZ = 4
+SAVER_PERIOD_S = 0.5                   # screensaver frames: it only runs while nothing plays
 SUPERVISED = ("speaker-pipewire", "speaker-wireplumber", "speaker-shairport", "speaker-radio",
               "speaker-arbiter", "speaker-soloist", "panda-bt", "panda-wifi")
 
@@ -97,9 +98,72 @@ def shell_conf(path):
 
 
 # --- fonts -----------------------------------------------------------------------------
+class CachedFont:
+    """A font whose glyphs FreeType renders once each: then a string is a few
+    small bitmap copies. On the ARM1176 FreeType takes ~19 ms per string, and a
+    frame has ~20 of them (measured on the Pi 1)."""
+
+    STRINGS = 1024      # whole strings kept as one bitmap (labels, marquee steps, times)
+
+    def __init__(self, path, size):
+        self.ft = ImageFont.truetype(path, size)
+        self.ascent, self.descent = self.ft.getmetrics()
+        self.glyphs = {}
+        self.strings = {}
+
+    def glyph(self, ch):
+        g = self.glyphs.get(ch)
+        if g is None:
+            adv = self.ft.getlength(ch)
+            x0, y0, x1, y1 = self.ft.getbbox(ch, anchor="ls")    # relative to the baseline
+            mask = None
+            if x1 > x0 and y1 > y0:
+                mask = Image.new("L", (x1 - x0, y1 - y0), 0)
+                md = ImageDraw.Draw(mask)
+                md.fontmode = "1"
+                md.text((-x0, -y0), ch, font=self.ft, fill=255, anchor="ls")
+            g = self.glyphs[ch] = (adv, x0, y0, mask)
+        return g
+
+    def getlength(self, s):
+        return sum(self.glyph(c)[0] for c in s)
+
+    def string(self, s):
+        """(mask, width, left offset, top offset from the baseline) for a whole string."""
+        r = self.strings.get(s)
+        if r is None:
+            if len(self.strings) >= self.STRINGS:
+                self.strings.clear()
+            gs = [self.glyph(c) for c in s]
+            w = sum(g[0] for g in gs)
+            left = min([g[1] for g in gs if g[3]] + [0])
+            top = min([g[2] for g in gs if g[3]] + [0])
+            right = max([g[1] + g[3].width + sum(x[0] for x in gs[:i]) for i, g in enumerate(gs) if g[3]] + [w])
+            bottom = max([g[2] + g[3].height for g in gs if g[3]] + [1])
+            mask = Image.new("L", (max(1, int(right - left) + 2), max(1, bottom - top)), 0)
+            pen = 0.0
+            for adv, gx, gy, m in gs:
+                if m is not None:
+                    mask.paste(m, (round(pen + gx - left), gy - top), m)
+                pen += adv
+            r = self.strings[s] = (mask, w, left, top)
+        return r
+
+    def draw(self, d, xy, s, fill, anchor="la"):
+        """Draw with an ImageDraw like ImageDraw.text, anchors l/m/r + a/m/s."""
+        if not s:
+            return 0
+        mask, w, left, top = self.string(s)
+        x, y = xy
+        x -= {"l": 0, "m": w / 2, "r": w}[anchor[0]]
+        base = y + {"a": self.ascent, "m": (self.ascent - self.descent) / 2, "s": 0}[anchor[1]]
+        d.bitmap((round(x + left), round(base + top)), mask, fill=fill)
+        return w
+
+
 class Fonts:
     def __init__(self, base=FONTS):
-        f = lambda name, size: ImageFont.truetype(os.path.join(base, name), size)
+        f = lambda name, size: CachedFont(os.path.join(base, name), size)
         self.ui = f("tahoma.ttf", 11)
         self.bold = f("tahomabd.ttf", 11)
         self.time = f("VT323-Regular.ttf", 30)       # 12 px per character
@@ -134,8 +198,7 @@ class Painter:
             while s and font.getlength(s + "...") > width:
                 s = s[:-1]
             s += "..."
-        self.d.text(xy, s, font=font, fill=fill, anchor=anchor)
-        return font.getlength(s)
+        return font.draw(self.d, xy, s, fill, anchor)
 
     def bevel(self, box, kind="raised", fill=FACE):
         x0, y0, x1, y1 = box
@@ -345,7 +408,7 @@ def icon_big(kind):
             if kind == "info":
                 d.ellipse((x + 2, y + 2, x + 25, y + 25), fill=(0, 0, 255))
             glyph, col = {"info": ("i", HILIGHT), "ask": ("?", TITLE_A)}.get(kind, ("!", TEXT))
-            d.text((x + 14, y + 14), glyph, font=p.f.bold, fill=col, anchor="mm")
+            p.f.bold.draw(d, (x + 14, y + 14), glyph, col, "mm")
     return draw
 
 
@@ -405,12 +468,21 @@ class Framebuffer:
         self.lut_hi = (r5, [v >> 5 for v in range(256)])
         self.lut_lo = ([(v << 3) & 0xE0 for v in range(256)], [v >> 3 for v in range(256)])
 
+    @staticmethod
+    def lut(band, table):
+        """band.point(table) without Pillow re-rounding the 256 entries in Python on
+        every call (7 ms each on the ARM1176): the C core takes the table as it is."""
+        try:
+            return band._new(band.im.point(table, None))
+        except (AttributeError, TypeError):
+            return band.point(table)
+
     def pack(self, im):
         if self.bpp == 32:
             return im.tobytes("raw", "BGRX")
         r, g, b = im.split()
-        hi = ImageChops.add(r.point(self.lut_hi[0]), g.point(self.lut_hi[1]))
-        lo = ImageChops.add(g.point(self.lut_lo[0]), b.point(self.lut_lo[1]))
+        hi = ImageChops.add(self.lut(r, self.lut_hi[0]), self.lut(g, self.lut_hi[1]))
+        lo = ImageChops.add(self.lut(g, self.lut_lo[0]), self.lut(b, self.lut_lo[1]))
         return Image.merge("LA", (lo, hi)).tobytes()
 
     def show(self, im, force=False):
@@ -433,6 +505,19 @@ class Framebuffer:
                 self.mem[off:off + row] = data[i * row:(i + 1) * row]
         self.front = im.copy()
 
+    def show_box(self, im, box):
+        """Copy one box (inclusive coordinates) as it is, without comparing."""
+        x0, y0, x1, y1 = box
+        part = im.crop((x0, y0, x1 + 1, y1 + 1))
+        data = self.pack(part)
+        bpp = self.bpp // 8
+        row = part.width * bpp
+        for i in range(part.height):
+            off = (y0 + i) * self.stride + x0 * bpp
+            self.mem[off:off + row] = data[i * row:(i + 1) * row]
+        if self.front is not None:
+            self.front.paste(part, (x0, y0))
+
 
 class PngSink:
     """--render-test: frames go to PNG files (scaled 2x) instead."""
@@ -444,6 +529,9 @@ class PngSink:
     def show(self, im, force=False, name="frame"):
         im.resize((W * 2, H * 2), Image.NEAREST).save(os.path.join(self.outdir, name + ".png"))
         self.front = im.copy()
+
+    def show_box(self, im, box):
+        pass
 
 
 class Backlight:
@@ -749,6 +837,10 @@ class Panel:
                        i % 17 == 0] for i in range(60)]
         self.spectrum = Spectrum(lambda: self.q.put(("spectrum",)))
         self.spectrum_errs = None
+        self.shown = None                # view() as of the last full frame
+        self.lcd_box = self.seek_box = self.bands_box = self.clock_box = (0, 0, 0, 0)
+        self.lcd_time_box = self.lcd_marq_box = (0, 0, 0, 0)
+        self.clock_shown = None
         self.input = None
         if not self.cal.ok and board.get("LCD_TOUCH_NAME") and not test:
             self.screen = "calibrate"
@@ -853,7 +945,8 @@ class Panel:
         if not bt.get("error"):
             connected = any(x.get("connected") for x in bt.get("devices") or [])
             icon_bt(p, 271, 224, TITLE_A if connected else SHADOW)
-        p.text((313, 230), time.strftime("%H:%M"), anchor="rm")
+        self.clock_box = (282, 223, 315, 236)
+        self.draw_clock()
         p.hit(tray, ("open", "net"))
         # The task button: the open window.
         label, icon = {"radio": ("Radio - Presets", icon_radio), "net": ("Network", icon_net),
@@ -868,6 +961,17 @@ class Panel:
             icon_bt(p, x + 2, 224)
             x += 14
         p.text((x, 224), label, p.f.bold, width=tb[2] - x - 3)
+
+    def draw_clock(self):
+        self.clock_shown = time.strftime("%H:%M")
+        self.p.d.rectangle(self.clock_box, fill=FACE)
+        self.p.text((313, 230), time.strftime("%H:%M"), anchor="rm")
+
+    def net_icon_state(self):
+        st = self.st()
+        wifi = st.get("wifi") or {}
+        links = ((st.get("net") or {}).get("links")) or {}
+        return (wifi.get("ssid"), wifi.get("signal"), any(v.get("state") == "up" for v in links.values()))
 
     def net_icon(self):
         st = self.st()
@@ -885,7 +989,6 @@ class Panel:
 
     def draw_now(self, active):
         p = self.p
-        d = p.d
         cur = self.current()
         t = self.track(cur)
         cl = p.window((2, 2, 317, 215), self.now_title(), icon_speaker_w, active, ("saver",))
@@ -893,46 +996,77 @@ class Panel:
         # The green display.
         lcd = (x0, y0, x1, y0 + 76)
         p.bevel(lcd, "sunken", LCD_BG)
+        self.lcd_box = (x0 + 2, y0 + 2, x1 - 2, lcd[3] - 2)
+        self.draw_lcd(t)
+        # Seek bar (display only: the sender owns the position).
+        sy = lcd[3] + 4
+        self.seek_box = (x0, sy, x1, sy + 9)
+        self.draw_seek(t)
+        # Transport and volume.
+        by = sy + 14
+        self.draw_now_lower(t, cl, by)
+
+    def draw_lcd(self, t, parts=("time", "marq", "fmt", "bands")):
+        """The green display's contents, all or some parts (the live updates redraw
+        each part alone, in its own box, at its own rate)."""
+        p = self.p
+        x0, y0, x1, y1 = self.lcd_box
+        x0, y0, x1 = x0 - 2, y0 - 2, x1 + 2
         lx, ly = x0 + 6, y0 + 4
-        p.text((lx, ly), fmt_time(t.get("elapsed")) if t["source"] else "--:--", p.f.time, LCD_FG)
-        if not t["source"]:
-            state = "STOP"
-        elif t.get("mute"):
-            state = "MUTED"
-        else:
-            state = "> PLAY" if t["playing"] else "|| PAUSE"
-        p.text((lx, ly + 34), state, p.f.small, LCD_FG)
-        p.text((lx, ly + 50), (t["source"] or "IDLE").upper(), p.f.small, LCD_DIM)
         mx = x0 + 92
-        mw = x1 - 6 - mx
-        chars = int(mw // 8)
-        if t["source"]:
-            line = " - ".join(s for s in (t.get("artist"), t.get("title")) if s) or t["source"]
-        else:
-            line = f'Nothing is playing. Pick "{self.name()}" in {self.sources_text()}.'
-        if len(line) > chars:
-            loop = line + "   ***   "
-            i = self.marq % len(loop)
-            line = (loop + loop)[i:i + chars]
-        p.text((mx, ly), line, p.f.marq, LCD_FG)
-        if t["source"]:
+        self.lcd_time_box = (x0 + 2, y0 + 2, mx - 4, y1)
+        self.lcd_marq_box = (mx, ly, x1 - 4, ly + 19)
+        self.bands_box = (mx, ly + 40, x1 - 6, y1 - 2)
+        if len(parts) == 4:
+            p.d.rectangle(self.lcd_box, fill=LCD_BG)
+        if "time" in parts:
+            if len(parts) < 4:
+                p.d.rectangle(self.lcd_time_box, fill=LCD_BG)
+            p.text((lx, ly), fmt_time(t.get("elapsed")) if t["source"] else "--:--", p.f.time, LCD_FG)
+            if not t["source"]:
+                state = "STOP"
+            elif t.get("mute"):
+                state = "MUTED"
+            else:
+                state = "> PLAY" if t["playing"] else "|| PAUSE"
+            p.text((lx, ly + 34), state, p.f.small, LCD_FG)
+            p.text((lx, ly + 50), (t["source"] or "IDLE").upper(), p.f.small, LCD_DIM)
+        if "marq" in parts:
+            if len(parts) < 4:
+                p.d.rectangle(self.lcd_marq_box, fill=LCD_BG)
+            chars = int((x1 - 6 - mx) // 8)
+            if t["source"]:
+                line = " - ".join(s for s in (t.get("artist"), t.get("title")) if s) or t["source"]
+            else:
+                line = f'Nothing is playing. Pick "{self.name()}" in {self.sources_text()}.'
+            if len(line) > chars:
+                loop = line + "   ***   "
+                i = self.marq % len(loop)
+                line = (loop + loop)[i:i + chars]
+            p.text((mx, ly), line, p.f.marq, LCD_FG)
+        if "fmt" in parts and t["source"]:
             rate = t.get("rate")
             bits = {"S16LE": "16BIT", "S24LE": "24BIT", "S32LE": "32BIT", "F32LE": "FLOAT"}.get(
                 str(t.get("format")).replace("_", ""), "")
             fmt = " ".join(s for s in ((f"{rate / 1000:g}KHZ" if rate else ""), bits) if s)
             w = p.text((mx, ly + 22), fmt + " ", p.f.small, LCD_FG) if fmt else 0
             p.text((mx + w, ly + 22), "STEREO", p.f.small, LCD_DIM)
-        self.draw_bands((mx, ly + 40, x1 - 6, lcd[3] - 4))
-        # Seek bar (display only: the sender owns the position).
-        sy = lcd[3] + 4
-        p.bevel((x0, sy, x1, sy + 9), "thin-sunken", FIELD)
+        if "bands" in parts:
+            self.draw_bands(self.bands_box)
+
+    def draw_seek(self, t):
+        p = self.p
+        x0, sy, x1, _ = self.seek_box
+        p.bevel(self.seek_box, "thin-sunken", FIELD)
         dur, el = t.get("duration"), t.get("elapsed")
         if dur and el is not None:
             fx = x0 + 1 + int((x1 - x0 - 2) * min(1.0, el / dur))
             if fx > x0 + 1:
-                d.rectangle((x0 + 1, sy + 1, fx, sy + 8), fill=TITLE_A)
-        # Transport and volume.
-        by = sy + 14
+                p.d.rectangle((x0 + 1, sy + 1, fx, sy + 8), fill=TITLE_A)
+
+    def draw_now_lower(self, t, cl, by):
+        p = self.p
+        x0, y0, x1, y1 = cl
         can_skip = t["source"] in ("Radio", "Bluetooth", "Spotify")
         for i, (kind, act) in enumerate((("prev", ("transport", "prev")),
                                          ("pause" if t["playing"] else "play", ("transport", "toggle")),
@@ -974,19 +1108,28 @@ class Panel:
     def draw_bands(self, box):
         x0, y0, x1, y1 = box
         d = self.p.d
+        d.rectangle(box, fill=LCD_BG)
         bands = self.spectrum.bands
         n = len(bands)
         bw = max(3, (x1 - x0 + 2) // n)
         h = y1 - y0
+        peak = y1 - int(h * 0.7)
+        # Solid bars first, then one pass of background lines makes the LED segments
+        # (a few dozen calls a frame instead of ~300 short lines).
         for i, v in enumerate(bands):
             bh = int(v * h / 255) // 2 * 2
             bx = x0 + i * bw
             if bx + bw - 2 > x1:
                 break
-            for yy in range(0, bh, 2):
-                d.line((bx, y1 - yy, bx + bw - 2, y1 - yy), fill=LCD_PEAK if yy > h * 0.7 else LCD_FG)
             if not bh:
                 d.line((bx, y1, bx + bw - 2, y1), fill=LCD_DIM)
+                continue
+            top = y1 - bh + 1
+            d.rectangle((bx, max(top, peak + 1), bx + bw - 2, y1), fill=LCD_FG)
+            if top <= peak:
+                d.rectangle((bx, top, bx + bw - 2, peak), fill=LCD_PEAK)
+        for yy in range(y1 - 1, y0 - 1, -2):
+            d.line((x0, yy, x1, yy), fill=LCD_BG)
 
     def draw_menu(self):
         p = self.p
@@ -1002,9 +1145,8 @@ class Panel:
         ld = ImageDraw.Draw(lbl)
         ld.fontmode = "1"
         lbl.paste(p.im.crop(band).rotate(-90, expand=True))
-        tw = ld.textlength("Panda", font=p.f.bold)
-        ld.text((4, 3), "Panda", font=p.f.bold, fill=HILIGHT)
-        ld.text((4 + tw + 2, 3), "98", font=p.f.ui, fill=LIGHT)
+        tw = p.f.bold.draw(ld, (4, 3), "Panda", HILIGHT)
+        p.f.ui.draw(ld, (4 + tw + 2, 3), "98", LIGHT)
         p.im.paste(lbl.rotate(90, expand=True), (band[0], band[1]))
         y = box[1] + 3
         for it in items:
@@ -1541,11 +1683,54 @@ class Panel:
                            and bool(t["source"]) and bool(t["playing"]), m.get("rate"), m.get("name"))
 
     # --- main loop -------------------------------------------------------------------------------
+    def plain(self):
+        """Now Playing with nothing over it: the live updates may draw in place."""
+        return (self.screen == "now" and not self.dialog and not self.menu
+                and time.monotonic() >= self.osd_until)
+
+    def view(self):
+        """What a full redraw would show, minus what the live updates draw (time,
+        position, marquee, bands, clock): a full redraw only when this changes."""
+        t = self.track(self.current())
+        st = self.st()
+        bt = st.get("bt") or {}
+        m = self.master()
+        return repr((self.screen, self.menu, self.dialog, self.shut_pick, self.pressed, self.vol_drag,
+                     {k: v for k, v in t.items() if k != "elapsed"}, m.get("volume"), m.get("errors"),
+                     self.net_icon_state(), [(x.get("name"), x.get("connected")) for x in bt.get("devices") or []],
+                     bt.get("window"), bt.get("window_left") if self.dialog == "pair" else None,
+                     self.favorites if self.screen == "radio" or self.menu == "radio" else None,
+                     st.get("radio") if self.screen == "radio" else None,
+                     (st.get("net"), st.get("sync"), (st.get("host") or {}).get("uptime", 0) // 60)
+                     if self.screen == "net" else None,
+                     time.monotonic() < self.osd_until, self.name()))
+
     def frame(self):
         if not self.backlight.on:
             return
         self.render()
         self.sink.show(self.p.im)
+        self.shown = self.view()
+
+    def live(self, parts):
+        """Redraw parts of Now Playing in place and copy only their boxes."""
+        if not self.backlight.on:
+            return
+        t = self.track(self.current())
+        boxes = []
+        lcd = [x for x in ("time", "marq", "bands") if x in parts]
+        if lcd:
+            self.draw_lcd(t, lcd)
+            boxes += [{"time": self.lcd_time_box, "marq": self.lcd_marq_box, "bands": self.bands_box}[x]
+                      for x in lcd]
+        if "seek" in parts:
+            self.draw_seek(t)
+            boxes.append(self.seek_box)
+        if "clock" in parts:
+            self.draw_clock()
+            boxes.append(self.clock_box)
+        for b in boxes:
+            self.sink.show_box(self.p.im, b)
 
     def run(self):
         self.api.cb = lambda: self.q.put(("status",))
@@ -1568,12 +1753,17 @@ class Panel:
                 ev = self.q.get(timeout=timeout)
             except queue.Empty:
                 ev = ("tick",)
+            need = "full"
             if ev[0] == "tick":
-                next_tick = time.monotonic() + (0.08 if self.screen == "saver" else period)
+                next_tick = time.monotonic() + (SAVER_PERIOD_S if self.screen == "saver" else period)
                 self.marq += 1
                 self.tick()
+                need = "live"
             elif ev[0] == "status":
                 self.check_status()
+                need = "live"
+            elif ev[0] == "spectrum":
+                need = "bands"
             elif ev[0] == "key":
                 self.key(ev[1])
             elif ev[0] in ("down", "move", "up"):
@@ -1587,7 +1777,28 @@ class Panel:
             # Drain what piled up (a burst of touch moves, spectrum frames) before drawing.
             if self.q.qsize() > 4 and ev[0] in ("move", "spectrum", "status"):
                 continue
-            self.frame()
+            if self.screen == "saver":
+                if ev[0] == "tick" or need == "full":
+                    self.frame()
+                continue
+            if need != "full" and self.view() != self.shown:
+                need = "full"             # something visible changed (a dialog, the OSD ending ...)
+            if need == "full":
+                self.frame()
+            elif self.plain():
+                if need == "bands":
+                    self.live({"bands"})
+                else:
+                    # Marquee every tick; time and position once a second (and on new
+                    # status); the clock when the minute changes.
+                    parts = {"marq"}
+                    if ev[0] == "status" or self.marq % MARQUEE_HZ == 0:
+                        parts |= {"time", "seek"}
+                    if time.strftime("%H:%M") != self.clock_shown:
+                        parts.add("clock")
+                    self.live(parts)
+            elif need == "live" and ev[0] == "tick" and self.marq % MARQUEE_HZ == 0:
+                self.frame()              # menus and dialogs: the clock, the pairing countdown
 
 
 def icon_power_big(p, x, y):

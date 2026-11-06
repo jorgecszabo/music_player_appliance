@@ -52,7 +52,9 @@ DARK_S = 600
 OSD_S = 1.5
 CRASH_S = 5
 MARQUEE_HZ = 4
-SAVER_PERIOD_S = 0.5                   # screensaver frames: it only runs while nothing plays
+SAVER_PERIOD_S = 0.5
+SPECTRUM_GRACE_S = 15                  # kill switch: ignore xruns this long after the start
+SPECTRUM_MAX_XRUNS = 3                 # ... then this many more turn the spectrum off                   # screensaver frames: it only runs while nothing plays
 SUPERVISED = ("speaker-pipewire", "speaker-wireplumber", "speaker-shairport", "speaker-radio",
               "speaker-arbiter", "speaker-soloist", "panda-bt", "panda-wifi")
 
@@ -537,7 +539,9 @@ class PngSink:
 class Backlight:
     def __init__(self, name):
         self.path = f"/sys/class/backlight/{name}" if name else None
-        self.on = True
+        # Unknown until written: the last run may have left it off (a plain stop
+        # blanks the panel), so the first set(True) always writes.
+        self.on = None
 
     def set(self, on):
         if on == self.on or not self.path:
@@ -775,6 +779,7 @@ class Spectrum:
                 self.proc.terminate()
                 self.proc = None
                 self.bands = bytes(self.BANDS)
+                self.cb()                  # redraw the bars flat (no frames come any more)
 
     def read(self, proc):
         while True:
@@ -787,6 +792,7 @@ class Spectrum:
             if self.proc is proc:
                 self.proc = None
                 self.bands = bytes(self.BANDS)
+                self.cb()
 
 
 # --- the UI ---------------------------------------------------------------------------------
@@ -837,6 +843,7 @@ class Panel:
                        i % 17 == 0] for i in range(60)]
         self.spectrum = Spectrum(lambda: self.q.put(("spectrum",)))
         self.spectrum_errs = None
+        self.spectrum_since = time.monotonic()
         self.shown = None                # view() as of the last full frame
         self.lcd_box = self.seek_box = self.bands_box = self.clock_box = (0, 0, 0, 0)
         self.lcd_time_box = self.lcd_marq_box = (0, 0, 0, 0)
@@ -1669,13 +1676,16 @@ class Panel:
         t = self.track(self.current())
         m = self.master()
         # Kill switch: audio underruns while the spectrum runs turn it off until restart.
+        # Not the first SPECTRUM_GRACE_S (starting it, or the panel, can cost one),
+        # and not for a stray one: SPECTRUM_MAX_XRUNS.
         errs = m.get("errors")
         if self.spectrum.proc is None:
             self.spectrum_errs = None
+            self.spectrum_since = now
         elif errs is not None:
-            if self.spectrum_errs is None:
+            if self.spectrum_errs is None or now - self.spectrum_since < SPECTRUM_GRACE_S:
                 self.spectrum_errs = errs
-            elif errs > self.spectrum_errs:
+            elif errs - self.spectrum_errs >= SPECTRUM_MAX_XRUNS:
                 log(f"output xruns went up ({self.spectrum_errs} -> {errs}) with the spectrum on: turning it off")
                 self.spectrum.want(False)
                 self.spectrum.available = False
@@ -1744,6 +1754,7 @@ class Panel:
             except ImportError:
                 log("no python evdev: no buttons or touch")
         self.load_favorites()
+        self.backlight.set(True)
         self.frame()
         period = 1 / MARQUEE_HZ
         next_tick = time.monotonic()

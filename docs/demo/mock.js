@@ -53,6 +53,7 @@
     services: Object.fromEntries(["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-wireplumber",
       "speaker-soloist", "speaker-shairport", "speaker-radio", "speaker-arbiter", "bluetooth", "panda-bt", "panda-wifi",
       "avahi-daemon", "chronyd", "sshd", "crond", "panda-web"].map((n) => [n, "started"])),
+    restartable: ["speaker-soloist", "speaker-shairport", "speaker-radio", "panda-bt", "panda-wifi", "bluetooth", "avahi-daemon", "chronyd"],
     sync: { leap: "Normal", offset: "+0.000412 seconds", stratum: 3, reference: "time.cloudflare.com" },
     lbu: { changes: 0, files: [] },
     tone: { bass: 2, treble: 0, cap: 13, cap_max: 15, cap_step_db: 2, available: true, onboard: true,

@@ -246,9 +246,10 @@ function renderRadio(s) {
   const on = !!r.playing;
   $("radio-led").classList.toggle("on", on);
   $("radio-stop").disabled = !on;
+  $("radio-restart").hidden = !!r.available || r.state === "starting";
   if (!r.available) {
-    setText("radio-station", "Radio player not running");
-    setText("radio-title", "Check the speaker-radio service.");
+    setText("radio-station", { starting: "Radio starting...", stuck: "Radio not responding" }[r.state] || "Radio stopped");
+    setText("radio-title", r.message || "Restarting the radio should bring it back.");
   } else if (on) {
     setText("radio-station", (r.station && r.station.name) || "Radio");
     const fmt = [r.codec && r.codec.toUpperCase(), r.bitrate ? `${Math.round(r.bitrate / 1000)} kbps` : null,
@@ -956,7 +957,7 @@ function renderSystem(s) {
 
 function renderServices(s) {
   const tbody = $("svc-table").tBodies[0];
-  const restartable = new Set(["speaker-soloist", "speaker-shairport", "panda-bt", "panda-wifi", "bluetooth", "avahi-daemon", "chronyd"]);
+  const restartable = new Set(s.restartable || []);
   tbody.replaceChildren();
   for (const [name, state] of Object.entries(s.services || {})) {
     if (name === "error") continue;
@@ -1062,6 +1063,12 @@ function wireActions() {
   $("radio-tag").addEventListener("input", () => { clearTimeout(tagTimer); tagTimer = setTimeout(suggestTags, 200); });
   $("radio-tag").addEventListener("focus", () => { if (!$("radio-tag-list").children.length) suggestTags(); }, { once: true });
   $("radio-country").addEventListener("focus", () => { if (!$("radio-country-list").children.length) loadCountries(); }, { once: true });
+  $("radio-restart").addEventListener("click", async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try { await post("/api/service", { name: "speaker-radio" }); } catch (err) { oops(err); }
+    setTimeout(() => { b.disabled = false; }, 5000);
+  });
   $("radio-stop").addEventListener("click", () => post("/api/radio", { cmd: "stop" }).catch(oops));
   radioFavorites(false);
 

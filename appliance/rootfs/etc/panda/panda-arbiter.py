@@ -31,6 +31,8 @@ import threading
 import time
 import tty
 
+import panda_ipc
+
 RT = "/opt/soloist-runtime"
 SOLOIST_WS = "127.0.0.1:47000"
 META_PIPE = "/run/speaker/shairport-metadata"
@@ -65,13 +67,8 @@ def soloist_ctl(*args, timeout=10):
 
 def mpv_command(*cmd):
     """One command over mpv's JSON IPC socket (speaker-radio)."""
-    import socket
     try:
-        with socket.socket(socket.AF_UNIX) as s:
-            s.settimeout(3)
-            s.connect("/run/speaker/radio.sock")
-            s.sendall(json.dumps({"command": list(cmd)}).encode() + b"\n")
-            s.recv(4096)
+        panda_ipc.mpv_raw(*cmd)
     except OSError as e:
         log("mpv:", e)
 

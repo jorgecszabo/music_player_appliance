@@ -53,6 +53,8 @@ import tty
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from panda_ipc import bt_call, mpv, mpv_raw, radio_probe, wifi_call
+
 PORT = int(os.environ.get("PANDA_WEB_PORT", "8080"))
 WEB_DIR = "/etc/panda/web"
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
@@ -60,11 +62,9 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/app.js": ("app.js", "text/javascript; charset=utf-8")}
 ADMIN = ["doas", "-n", "/etc/panda/web-admin.sh"]
 PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
-BT_SOCK = "/run/panda/bt.sock"
 MAX_UPLOAD = 1 << 30                 # larger than any bundle (the card has 512 MiB)
 UPLOAD = {}                          # progress of the running/last OTA upload
 UPLOAD_LOCK = threading.Lock()
-WIFI_SOCK = "/run/panda/wifi.sock"
 SERVICES = ["panda-firewall", "panda-audio-init", "speaker-pipewire", "speaker-wireplumber",
             "speaker-soloist", "speaker-shairport", "speaker-radio", "speaker-arbiter", "bluetooth",
             "panda-bt", "panda-wifi", "avahi-daemon",
@@ -116,31 +116,9 @@ if not SPOTIFY:
     LOGS.remove("soloist")
 
 
-def bt_call(req, timeout=5, sock=BT_SOCK, name="panda-bt"):
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout)
-            s.connect(sock)
-            s.sendall(json.dumps(req).encode() + b"\n")
-            buf = b""
-            while not buf.endswith(b"\n"):
-                chunk = s.recv(65536)
-                if not chunk:
-                    break
-                buf += chunk
-        return json.loads(buf)
-    except (OSError, ValueError) as e:
-        return {"error": f"{name} unavailable ({e.__class__.__name__})"}
-
-
-def wifi_call(req, timeout=5):
-    return bt_call(req, timeout, WIFI_SOCK, "panda-wifi")
-
-
 # --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
 RADIO_DNS = "all.api.radio-browser.info"
 RADIO_UA = "PandaSpeaker/1.0 (Alpine Linux audio appliance; panda-web)"
-MPV_SOCK = "/run/speaker/radio.sock"
 FAVORITES = "/var/lib/panda-web/radio-favorites.json"
 STATION_FIELDS = ("stationuuid", "name", "codec", "bitrate", "countrycode", "tags", "votes",
                   "clickcount", "hls")
@@ -200,6 +178,16 @@ def rb_get(path, params=None, timeout=10, ttl=300):
     return data
 
 
+def rc_states():
+    """OpenRC state of every service: {name: started|starting|stopping|stopped|crashed|...}."""
+    states = {}
+    for line in run(["rc-status", "-a", "-f", "ini"]).splitlines():
+        m = re.match(r"^\s*([\w.-]+)\s*=\s*(\w+)", line)
+        if m:
+            states[m.group(1)] = m.group(2)
+    return states
+
+
 def station_summary(st):
     out = {k: st.get(k) for k in STATION_FIELDS}
     out["name"] = str(out.get("name") or "").strip()[:120]
@@ -207,48 +195,52 @@ def station_summary(st):
     return out
 
 
-def mpv(*cmd, timeout=3):
-    """Send one command to mpv's JSON IPC; return its "data" (None on error)."""
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(timeout)
-            s.connect(MPV_SOCK)
-            s.sendall(json.dumps({"command": list(cmd), "request_id": 1}).encode() + b"\n")
-            buf = b""
-            while True:
-                chunk = s.recv(65536)
-                if not chunk:
-                    return None
-                buf += chunk
-                while b"\n" in buf:
-                    line, buf = buf.split(b"\n", 1)
-                    try:
-                        msg = json.loads(line)
-                    except ValueError:
-                        continue
-                    if msg.get("request_id") == 1:
-                        return msg.get("data") if msg.get("error") == "success" else None
-    except OSError:
-        return None
+_radio_state = {"at": 0.0, "state": "stopped"}
+
+
+def radio_down_state():
+    """Why the player can't be reached, for people who don't know what mpv is:
+    "starting" (OpenRC is starting or stopping it: it comes back by itself within
+    seconds), "stuck" (OpenRC says it runs but it doesn't answer) or "stopped".
+    The rc-status probe is slow-ish, so it's cached for 2 s."""
+    now = time.monotonic()
+    if now - _radio_state["at"] > 2:
+        rc = rc_states().get("speaker-radio", "stopped")
+        _radio_state["state"] = ("starting" if rc in ("starting", "stopping", "inactive")
+                                 else "stuck" if rc == "started" else "stopped")
+        _radio_state["at"] = now
+    return _radio_state["state"]
+
+
+RADIO_DOWN_TEXT = {
+    "starting": "The radio is starting up. Try again in a few seconds.",
+    "stuck": "The radio isn't responding. Restarting it usually fixes that.",
+    "stopped": "The radio has stopped. Restarting it should bring it back.",
+}
+
+
+def radio_down():
+    state = radio_down_state()
+    return {"available": False, "state": state, "message": RADIO_DOWN_TEXT[state]}
 
 
 def radio_status():
-    idle = mpv("get_property", "idle-active")
-    if idle is None:
-        return {"available": False}
+    probe = radio_probe()
+    if probe is None:
+        return radio_down()
     st = RADIO["station"]
-    if idle:
+    if probe["idle"]:
         return {"available": True, "playing": False, "station": st}
-    meta = mpv("get_property", "metadata") or {}
+    meta = probe.get("metadata") or {}
     title = meta.get("icy-title") or meta.get("StreamTitle") or ""
-    params = mpv("get_property", "audio-params") or {}
+    params = probe.get("audio-params") or {}
     return {"available": True, "playing": True, "station": st,
-            "paused": bool(mpv("get_property", "pause")),
+            "paused": bool(probe.get("pause")),
             "title": str(title)[:200],
-            "codec": mpv("get_property", "audio-codec-name") or "",
-            "bitrate": mpv("get_property", "audio-bitrate"),
+            "codec": probe.get("audio-codec-name") or "",
+            "bitrate": probe.get("audio-bitrate"),
             "rate": params.get("samplerate"),
-            "buffering": bool(mpv("get_property", "paused-for-cache"))}
+            "buffering": bool(probe.get("paused-for-cache"))}
 
 
 def load_favorites():
@@ -455,6 +447,7 @@ class Collector:
             "bt": bt_call({"cmd": "status"}),
             "wifi": wifi_call({"cmd": "status"}),
             "services": self.slow.get("services"),
+            "restartable": sorted(RESTARTABLE),
             "sync": self.slow.get("sync"),
             "lbu": self.slow.get("lbu"),
             "tone": self.tone(board),
@@ -550,11 +543,7 @@ class Collector:
         return {"addrs": addrs, "links": links}
 
     def services(self):
-        states = {}
-        for line in run(["rc-status", "-a", "-f", "ini"]).splitlines():
-            m = re.match(r"^\s*([\w.-]+)\s*=\s*(\w+)", line)
-            if m:
-                states[m.group(1)] = m.group(2)
+        states = rc_states()
         return {s: states.get(s, "not in a runlevel") for s in SERVICES}
 
     def sync(self):
@@ -1170,8 +1159,10 @@ class Handler(BaseHTTPRequestHandler):
             stream = (res or {}).get("url") or st[0].get("url_resolved") or st[0].get("url") or ""
             if not re.match(r"^https?://", stream):
                 raise ValueError("station has no http(s) stream")
-            if mpv("loadfile", stream, "replace", timeout=5) is None and mpv("get_property", "idle-active") is None:
-                raise ValueError("the radio player isn't running")
+            try:
+                mpv_raw("loadfile", stream, "replace", timeout=5)
+            except OSError:
+                raise ValueError(RADIO_DOWN_TEXT[radio_down_state()])
             RADIO["station"] = station_summary(st[0])
             return {"ok": True, "station": RADIO["station"]}
         raise ValueError("unknown command")

@@ -54,7 +54,7 @@ To add a board, see [Porting](#porting-the-appliance-to-another-board).
 
 | `BOARD=` | Board | SoC / Alpine arch | Kernel package | Audio out | Wi-Fi / Bluetooth |
 |---|---|---|---|---|---|
-| `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 (Wi-Fi doesn't connect yet), or USB |
+| `pandaboard` (default) | PandaBoard rev A1 | OMAP4430, armv7 | `linux-pandaboard` | TWL6040 3.5 mm jack (96 kHz), or USB audio | onboard TI WL1271 Bluetooth; Wi-Fi: USB dongles (the onboard Wi-Fi has no driver) |
 | `beaglexm` | BeagleBoard-xM | DM3730 (OMAP3), armv7 | `linux-beaglexm` | TWL4030 3.5 mm jack (48 kHz), or USB audio | none onboard: USB dongles |
 | `pcduino` | pcDuino Lite (512 MB, no NAND) | Allwinner A10, armv7 | `linux-pcduino` | USB audio only (no onboard output) | none onboard: USB dongles |
 | `rpi1` (bring-up, untested) | Raspberry Pi 1 Model B rev 2 + 2.8" TFT | BCM2835 (ARM1176, 1 GHz OC), **armhf** | Alpine's `linux-rpi` | PWM 3.5 mm jack, or USB audio | none onboard: USB dongles; no Spotify (ARMv6) |
@@ -273,9 +273,9 @@ Steps:
 ## Status
 
 A hobby project for upcycling old dev boards. It works for me on the supported
-boards. It's published as is, with no support or roadmap. Known problem: the
-PandaBoard's onboard WL1271 Wi-Fi doesn't connect yet, so use Ethernet or a USB
-dongle.
+boards. It's published as is, with no support or roadmap. Known limitation: the
+PandaBoard's onboard WL1271 Wi-Fi never connected reliably, so its driver is left
+out of the kernel; use Ethernet or a USB dongle. Its Bluetooth works.
 
 ## License
 

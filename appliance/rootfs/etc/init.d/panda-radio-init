@@ -5,9 +5,12 @@
 # Bluetooth is running resets the chip under the BT firmware: Bluetooth stops
 # answering, and only cutting the power brings it back. So: the BT driver is
 # blacklisted from autoloading (/etc/modprobe.d/panda-radio.conf, from
-# setup.sh); this brings the onboard Wi-Fi interface up first (and it then
-# stays up for good: panda-wifi never takes it down), and only then loads the
-# BT driver. If there's no onboard Wi-Fi interface after 20 s, BT loads anyway.
+# setup.sh); this settles the Wi-Fi half first, and only then loads the BT
+# driver. If the board has an onboard Wi-Fi interface, it is brought up and
+# stays up for good (panda-wifi never takes it down). If the kernel has no
+# driver for it, the chip's SDIO card is still powered by the MMC core, which
+# may power it off again (runtime PM, MMC_CAP_POWER_OFF_CARD): pin its power on.
+# If neither shows up after 20 s, BT loads anyway.
 
 description="Power up the onboard Wi-Fi before Bluetooth (shared chip)"
 
@@ -27,6 +30,17 @@ onboard_wifi() {
 	return 1
 }
 
+# The SDIO card (mmcN:0001) of a chip nobody drives: echo its power control on.
+sdio_card() {
+	for f in /sys/bus/sdio/devices/*; do
+		[ -e "$f" ] || continue
+		[ -e "$f/driver" ] && continue	# a driver owns it: it handles the power
+		c=$(readlink -f "$f/..")
+		[ -e "$c/power/control" ] && echo "$c" && return 0
+	done
+	return 1
+}
+
 # Locally administered MAC from another interface's (as panda-wifi does).
 derived_mac() {
 	m=$(cat /sys/class/net/"$1"/address 2>/dev/null) || return 1
@@ -39,16 +53,22 @@ derived_mac() {
 start() {
 	. /etc/panda/board.conf
 	[ -n "${BT_DRIVER_AFTER_WIFI:-}" ] || return 0
-	ebegin "Powering up the onboard Wi-Fi before Bluetooth"
-	i=0; ifc=""
-	while [ $i -lt 40 ] && ! ifc=$(onboard_wifi); do sleep 0.5; i=$((i + 1)); done
-	if [ -n "$ifc" ]; then
+	ebegin "Settling the onboard Wi-Fi half before Bluetooth"
+	i=0; ifc=""; card=""
+	while [ $i -lt 40 ]; do
+		ifc=$(onboard_wifi) && break
+		card=$(sdio_card) && break
+		sleep 0.5; i=$((i + 1))
+	done
+	if [ -n "$card" ]; then
+		echo on > "$card/power/control" || ewarn "couldn't pin $card on"
+	elif [ -n "$ifc" ]; then
 		if [ -n "${WIFI_MAC_FROM:-}" ] && mac=$(derived_mac "$WIFI_MAC_FROM"); then
 			ip link set "$ifc" address "$mac" 2>/dev/null
 		fi
 		ip link set "$ifc" up || ewarn "$ifc didn't come up"
 	else
-		ewarn "no onboard Wi-Fi interface; loading Bluetooth anyway"
+		ewarn "no onboard Wi-Fi interface or SDIO card; loading Bluetooth anyway"
 	fi
 	modprobe "$BT_DRIVER_AFTER_WIFI"
 	eend $?

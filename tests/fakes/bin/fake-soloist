@@ -1,0 +1,21 @@
+#!/bin/sh
+# Stands in for "soloist ctl ..." (PANDA_SOLOIST_CTL): records the call; "pause" pauses the
+# fake Spotify source unless $FAKE_SOLOIST_DIR/ignore-pause exists; "now --json" prints
+# $FAKE_SOLOIST_DIR/now.json if present.
+echo "$*" >> "$FAKE_SOLOIST_DIR/calls"
+case "$1" in
+pause)
+	[ -e "$FAKE_SOLOIST_DIR/ignore-pause" ] && exit 0
+	python3 - "$FAKE_SOLOIST_DIR/spotify.sock" <<'PY'
+import socket, sys
+try:
+    s = socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect(sys.argv[1])
+    s.sendall(b'{"command": ["set_property", "pause", true]}\n'); s.recv(4096)
+except OSError:
+    pass
+PY
+	;;
+now)
+	cat "$FAKE_SOLOIST_DIR/now.json" 2>/dev/null ;;
+esac
+exit 0

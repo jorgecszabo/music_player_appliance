@@ -165,6 +165,56 @@ the slot's version again.
 Recovery without the web page: the boot menu on the serial console lists both slots,
 or edit `extlinux/extlinux.conf` (`DEFAULT a` / `DEFAULT b`) on a PC.
 
+## Testing
+
+Everything below runs without a board unless it says otherwise. [TESTING.md](TESTING.md) has the plan,
+what each test covers and the known limits.
+
+```sh
+# Once: a virtualenv with the test tools (pytest, hypothesis, ruff, shellcheck, dbus-next, evdev)
+python3 -m venv .venv && .venv/bin/pip install -r tests/requirements.txt
+
+scripts/check.sh                 # lint (ruff, shellcheck, nft syntax) + ~690 unit, consistency and fuzz tests, ~2.5 min
+scripts/check.sh -k radio        # extra arguments go to pytest; FUZZ_EXAMPLES=1000 for a longer fuzz run
+scripts/test-graph.sh            # the audio-graph integration suite, ~4 min (needs rootless podman)
+scripts/test-graph.sh tests/graph/test_failures.py -k hung    # part of it
+scripts/test-ota.sh              # OTA slots against a built image (build/sdimage/<board>)
+```
+
+`check.sh` needs no container: it covers the web server and its API (including malformed requests and
+the root helper `web-admin.sh`), the arbiter, Bluetooth, Wi-Fi, OTA, the audio routing, the generated
+configs, the firewall and the web page (headless Chromium, skipped if it isn't installed).
+`test-graph.sh` builds a small Alpine image and runs the real PipeWire, WirePlumber, mpv, arbiter and web
+server in it, with a null sound card and fake phones, Spotify, BlueZ and radio stations. It starts, stops
+and kills the services in every combination of sources and checks that exactly one source is audible, that
+a service that dies or hangs comes back, and that the web page's view matches PipeWire's. A failing test
+leaves its logs, `pw-dump` and a summary in `build/graph-artifacts/<test>/`.
+
+### On a board
+
+`scripts/smoke.sh` checks a running speaker from this machine, over its web API and optionally ssh. It
+installs nothing on the board. It plays a real radio station, restarts the radio and the audio stack,
+sends malformed requests, and prints a checklist for the parts that need a phone.
+
+```sh
+# 1. Put the code under test on the board, live: it runs from RAM until the next reboot
+PANDA_HOST=panda@192.168.0.55 scripts/deploy.sh --restart
+# 2. Test it (SMOKE_SSH adds process, memory and kernel-log checks)
+SMOKE_SSH=panda@192.168.0.55 scripts/smoke.sh 192.168.0.55
+```
+
+Options: `--quick` (nothing that restarts services), `--no-radio` (no internet on the board),
+`--no-wifi-scan`. Exit status 1 if anything FAILs. To test an installed version instead, update the board
+through OTA first (see "Updates"), then run step 2.
+
+- Use the Ethernet address when the board has one: a Wi-Fi link can drop during a test.
+- If your ssh key has a passphrase, load it into the agent first (`ssh-add ~/.ssh/id_rsa`): the scripts
+  run ssh non-interactively. The board only accepts the keys it was built with (`appliance/authorized_keys`).
+- It restarts the audio stack: run it on a speaker nobody is listening to.
+- The board mounts `/proc` with `hidepid`, so the process checks use `doas` and print only pids and sizes
+  (never command lines: the Spotify key is in one).
+- A FAIL in the "regression probes" section means the board runs code from before those fixes (deploy it).
+
 ## Our forks of Alpine packages
 
 `aports/` holds forks of Alpine packages: shairport-sync (native PipeWire

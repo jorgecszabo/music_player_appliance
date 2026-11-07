@@ -1,0 +1,6 @@
+pytest>=8
+hypothesis>=6
+ruff
+shellcheck-py
+dbus-next
+evdev

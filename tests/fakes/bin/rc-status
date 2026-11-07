@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Stands in for `rc-status -a -f ini`: asks the rig (the test's supervisor) for service states."""
+import json
+import socket
+
+try:
+    with socket.socket(socket.AF_UNIX) as s:
+        s.settimeout(3)
+        s.connect("/run/rig/control.sock")
+        s.sendall(b'{"cmd": "states"}\n')
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+    states = json.loads(buf)
+except (OSError, ValueError):
+    states = {}
+print("[default]")
+for name, state in sorted(states.items()):
+    print(f" {name} = {state}")

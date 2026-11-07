@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Stands in for `doas -n /etc/panda/web-admin.sh` (PANDA_ADMIN_CMD): records the verb and
+forwards restarts to the rig, which restarts the matching process (the real script does it
+in the background with rc-service, and returns at once)."""
+import json
+import socket
+import sys
+
+args = sys.argv[1:]
+try:
+    with socket.socket(socket.AF_UNIX) as s:
+        s.settimeout(5)
+        s.connect("/run/rig/control.sock")
+        s.sendall(json.dumps({"cmd": "admin", "args": args}).encode() + b"\n")
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+    out = json.loads(buf).get("out", "")
+except (OSError, ValueError):
+    out = ""
+print(out)

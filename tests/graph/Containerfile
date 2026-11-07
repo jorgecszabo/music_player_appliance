@@ -1,0 +1,17 @@
+# Rig for the audio-graph integration suite (TESTING.md section 12): real PipeWire,
+# WirePlumber, mpv and the appliance's own Python services on x86_64 Alpine, with a null
+# audio sink instead of sound hardware. Built by scripts/test-graph.sh.
+ARG ALPINE_VERSION=3.24
+FROM docker.io/library/alpine:${ALPINE_VERSION}
+
+RUN apk add --no-cache \
+        pipewire wireplumber pipewire-tools pipewire-spa-tools pipewire-pulse \
+        mpv dbus python3 py3-dbus-next py3-pytest py3-hypothesis \
+        bash coreutils procps util-linux
+
+# The appliance's users: pipewire & friends run as "speaker", the web page as "panda-web".
+RUN addgroup -S speaker && adduser -S -G speaker -h /var/lib/speaker speaker \
+ && addgroup -S panda-web && adduser -S -G panda-web -h /var/lib/panda-web panda-web \
+ && addgroup panda-web speaker
+
+WORKDIR /repo

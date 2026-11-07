@@ -6,3 +6,7 @@ appliance/authorized_keys
 **/aports/*/pkg/
 appliance/wifi.json
 __pycache__/
+.venv/
+.pytest_cache/
+.hypothesis/
+tests/graph/artifacts/

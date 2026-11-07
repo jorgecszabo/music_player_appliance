@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for audio-route.py (PANDA_ROUTE_CMD): just records that it ran.
+echo "$*" >> "$FAKE_ROUTE_LOG"

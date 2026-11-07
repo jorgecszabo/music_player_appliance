@@ -1,0 +1,13 @@
+# Lint for the appliance code: real bugs only (undefined names, unused
+# variables, syntax errors). Style is not enforced.
+target-version = "py311"
+extend-exclude = ["drivers", "build", "packages", ".venv"]
+
+[lint]
+select = ["F", "E9"]
+
+[lint.per-file-ignores]
+# dbus_next signatures are string annotations ("o", "s", "u"): not names.
+"appliance/rootfs/etc/panda/panda-bt.py" = ["F821"]
+# dbus_next signatures as annotations ("a{oa{sa{sv}}}").
+"tests/fakes/fake_bluez.py" = ["F722"]

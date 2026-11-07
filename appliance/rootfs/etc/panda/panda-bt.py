@@ -339,9 +339,15 @@ class App:
         try:
             line = await asyncio.wait_for(reader.readline(), 5)
             try:
-                reply = await self.control(json.loads(line))
+                req = json.loads(line)
+                if not isinstance(req, dict):
+                    raise ValueError("a request is a JSON object")
+                reply = await self.control(req)
             except (ValueError, DBusError) as e:
                 reply = {"error": str(e)}
+            except Exception as e:          # a bug must not leave the client without an answer
+                log("control request failed:", repr(e))
+                reply = {"error": "internal error"}
             writer.write(json.dumps(reply).encode() + b"\n")
             await writer.drain()
         except (asyncio.TimeoutError, ConnectionError):

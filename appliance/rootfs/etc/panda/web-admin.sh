@@ -27,10 +27,14 @@
 #                                    tone, volume caps, output: audio.conf, applied live
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
+LC_ALL=C; export LC_ALL        # [A-Za-z] means ASCII letters, whatever the locale
 . /etc/panda/board.conf
 . /etc/panda/appliance.conf
 
 die() { echo "web-admin: $*" >&2; exit 2; }
+# match <ERE> <value>: the value is one line and matches. (grep tests line by line, so a value
+# like "ok<newline>reboot" would pass a plain  grep -Eq '^ok$'  and end up in files root sources.)
+match() { [ "$(printf '%s' "$2" | wc -l)" -eq 0 ] && printf '%s' "$2" | grep -Eq "$1"; }
 # board.conf SPOTIFY=no: no speaker-soloist service to start or restart.
 spotify() { [ "${SPOTIFY:-yes}" != no ]; }
 soloist() { spotify || return 0; rc-service speaker-soloist "$@"; }
@@ -91,7 +95,7 @@ set-name)
 	name="${2:-}"
 	# Letters, digits, space and . _ - ' only; 1-32 chars. It ends up in shell,
 	# bluez and shairport config files, so nothing that needs quoting.
-	printf '%s' "$name" | grep -Eq "^[A-Za-z0-9][A-Za-z0-9 ._'-]{0,31}\$" || die "invalid name"
+	match "^[A-Za-z0-9][A-Za-z0-9 ._'-]{0,31}\$" "$name" || die "invalid name"
 	[ "$name" = "$SPEAKER_NAME" ] && { echo unchanged; exit 0; }
 	tmp=/etc/panda/appliance.conf.new
 	awk -v n="$name" '/^SPEAKER_NAME=/ { print "SPEAKER_NAME=\"" n "\""; next } { print }' \
@@ -107,7 +111,7 @@ set-soloist-key)
 	# One line on stdin. Never echoed, never on a command line.
 	IFS= read -r key || true
 	key=$(printf '%s' "$key" | tr -d '\r')
-	printf '%s' "$key" | grep -Eq '^[A-Za-z0-9_.-]{16,200}$' || die "invalid key format"
+	match '^[A-Za-z0-9_.-]{16,200}$' "$key" || die "invalid key format"
 	f=/etc/panda/soloist.key
 	( umask 077; printf '%s\n' "$key" > "$f.new" ) && chown root:root "$f.new" && mv "$f.new" "$f"
 	unset key
@@ -126,16 +130,16 @@ factory-reset-dry)
 set-audio)
 	b="${2:-}" t="${3:-}" m="${4:-}" o="${5:-}" u="${6:-}" p="${7:-auto}"
 	for v in "$b" "$t"; do
-		printf '%s' "$v" | grep -Eq '^-?[0-9]{1,2}$' && [ "$v" -ge -12 ] && [ "$v" -le 12 ] \
+		match '^-?[0-9]{1,2}$' "$v" && [ "$v" -ge -12 ] && [ "$v" -le 12 ] \
 			|| die "tone must be an integer -12..12 dB"
 	done
-	printf '%s' "$m" | grep -Eq '^[0-9]{1,3}$' && [ "$m" -le "${AUDIO_HW_VOLUME_MAX:-0}" ] \
+	match '^[0-9]{1,3}$' "$m" && [ "$m" -le "${AUDIO_HW_VOLUME_MAX:-0}" ] \
 		|| die "cap must be 0..${AUDIO_HW_VOLUME_MAX:-0}"
 	case "$o" in onboard|usb) ;; *) die "output must be onboard or usb" ;; esac
-	printf '%s' "$u" | grep -Eq '^-?[0-9]{1,2}$' && [ "$u" -ge -30 ] && [ "$u" -le 0 ] \
+	match '^-?[0-9]{1,2}$' "$u" && [ "$u" -ge -30 ] && [ "$u" -le 0 ] \
 		|| die "USB cap must be an integer -30..0 dB"
 	# "auto" or an ACP profile name (e.g. output:analog-stereo, pro-audio).
-	printf '%s' "$p" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9:+._-]{0,79}$' || die "bad USB mode"
+	match '^[A-Za-z0-9][A-Za-z0-9:+._-]{0,79}$' "$p" || die "bad USB mode"
 	f=/etc/panda/audio.conf
 	grep -q '^USB_PROFILE=' "$f" || echo "USB_PROFILE=auto" >> "$f"
 	sed -e "s/^BASS_DB=.*/BASS_DB=$b/" -e "s/^TREBLE_DB=.*/TREBLE_DB=$t/" \
@@ -156,7 +160,7 @@ set-audio)
 	echo ok ;;
 set-master)
 	v="${2:-}"
-	printf '%s' "$v" | grep -Eq '^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$' || die "volume must be 0..1"
+	match '^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$' "$v" || die "volume must be 0..1"
 	f=/etc/panda/audio.conf
 	if grep -q '^MASTER_VOLUME=' "$f"; then
 		sed "s/^MASTER_VOLUME=.*/MASTER_VOLUME=$v/" "$f" > "$f.new" && mv "$f.new" "$f"

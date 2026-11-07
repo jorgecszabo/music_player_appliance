@@ -21,10 +21,12 @@ AirPlay (shairport-sync's metadata pipe) are written to
 from panda-bt (AVRCP).
 """
 import base64
+import itertools
 import json
 import os
 import pty
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -33,23 +35,38 @@ import tty
 
 import panda_ipc
 
+# The PANDA_* environment variables are for the test suite (TESTING.md section 12.4):
+# nothing sets them on the appliance.
+RUN = os.environ.get("PANDA_SPEAKER_RUN_DIR", "/run/speaker")
 RT = "/opt/soloist-runtime"
 SOLOIST_WS = "127.0.0.1:47000"
-META_PIPE = "/run/speaker/shairport-metadata"
-NOWPLAYING = "/run/speaker/nowplaying.json"
+SOLOIST_CTL = os.environ.get("PANDA_SOLOIST_CTL")      # a command to run instead of the runtime's
+BOARD_CONF = os.environ.get("PANDA_BOARD_CONF", "/etc/panda/board.conf")
+META_PIPE = RUN + "/shairport-metadata"
+NOWPLAYING = RUN + "/nowplaying.json"
 IGNORE = {"chime", "panda-eq.output"}
-PAUSE_GRACE_S = 2.0
-ROUTE = ["/usr/bin/python3", "/etc/panda/audio-route.py"]
-ROUTE_SETTLE_S = 1.5    # let WirePlumber finish setting up a new card first
+PAUSE_GRACE_S = float(os.environ.get("PANDA_PAUSE_GRACE_S", 2.0))
+ROUTE = shlex.split(os.environ.get("PANDA_ROUTE_CMD", "/usr/bin/python3 /etc/panda/audio-route.py"))
+ROUTE_SETTLE_S = float(os.environ.get("PANDA_ROUTE_SETTLE_S", 1.5))  # let WirePlumber finish setting up a new card first
 
 
 def log(*a):
-    print("panda-arbiter:", *a, flush=True)
+    # One write per line: print() writes the text and the newline separately, so lines from
+    # different threads could interleave in the log.
+    sys.stdout.write(" ".join(["panda-arbiter:", *map(str, a)]) + "\n")
+    sys.stdout.flush()
+
+
+def decision(**fields):
+    """With PANDA_DEBUG_EVENTS=1, one JSON line per policy decision, so tests (and a person
+    debugging on a board) can see what the arbiter did and why."""
+    if os.environ.get("PANDA_DEBUG_EVENTS"):
+        log("DECISION " + json.dumps(fields, sort_keys=True))
 
 
 def soloist_bin():
     board = {}
-    for line in open("/etc/panda/board.conf"):
+    for line in open(BOARD_CONF):
         m = re.match(r"^([A-Z_]+)=\"?([^\"#\s]*)", line.strip())
         if m:
             board[m.group(1)] = m.group(2)
@@ -57,8 +74,11 @@ def soloist_bin():
 
 
 def soloist_ctl(*args, timeout=10):
-    cmd = [f"{RT}/lib/ld.so", "--library-path", f"{RT}/lib", soloist_bin(),
-           "ctl", "-w", SOLOIST_WS, *args]
+    if SOLOIST_CTL:
+        cmd = [*shlex.split(SOLOIST_CTL), *args]
+    else:
+        cmd = [f"{RT}/lib/ld.so", "--library-path", f"{RT}/lib", soloist_bin(),
+               "ctl", "-w", SOLOIST_WS, *args]
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
     except (OSError, subprocess.TimeoutExpired):
@@ -74,8 +94,8 @@ def mpv_command(*cmd):
 
 
 def source_of(props):
-    name = props.get("node.name", "")
-    app = (props.get("application.name") or "").lower()
+    name = str(props.get("node.name") or "")
+    app = str(props.get("application.name") or "").lower()
     if name.startswith("bluez_input"):
         return "Bluetooth"
     if name == "airplay" or "shairport" in name or "airplay" in app:
@@ -84,7 +104,7 @@ def source_of(props):
         return "Spotify"
     if name == "radio" or app == "radio":
         return "Radio"
-    return props.get("application.name") or name
+    return str(props.get("application.name") or name)
 
 
 class NowPlaying:
@@ -171,10 +191,25 @@ class NowPlaying:
 NOW = NowPlaying()
 
 
+def pty_lines(master):
+    """Lines read from a pty master. Linux reports "the other end closed" (pw-dump exited,
+    e.g. PipeWire restarted) as EIO instead of end-of-file: that is the end, not an error."""
+    f = os.fdopen(master, "r", errors="replace")
+    try:
+        yield from f
+    except OSError:
+        return
+
+
 class Arbiter:
     def __init__(self):
         self.streams = {}      # id -> {"source", "state", "since", "props"}
         self.muted_by_us = set()
+        # Sources we muted. WirePlumber remembers a stream's mute and applies it to the next
+        # stream of the same kind, so a source we muted comes back muted on a new node.
+        self.muted_sources = set()
+        self.meta_loops = set()            # nodes with a running spotify_meta_loop
+        self.serial = itertools.count(1)   # tells a stream from a later one that reuses its node id
         self.lock = threading.Lock()
         self.outputs = set()   # ids of alsa_output sinks and the tone filter's output
         self.route_timer = None
@@ -186,15 +221,15 @@ class Arbiter:
         # it a pseudo-terminal, which it line-buffers.
         master, slave = pty.openpty()
         tty.setraw(slave)
-        p = subprocess.Popen(["pw-dump", "--monitor", "--no-colors"], stdout=slave,
-                             stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["pw-dump", "--monitor", "--no-colors"], stdout=slave,
+                         stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         os.close(slave)
         # pw-dump prints objects inside long-lived top-level arrays; each object
         # starts with "  {" and ends with "  }" / "  }," (2-space indent). Parse
         # each object as soon as it's complete (waiting for "]" delays events,
         # and re-parsing the whole buffer per line is quadratic).
         obj = None
-        for line in os.fdopen(master, "r", errors="replace"):
+        for line in pty_lines(master):
             if obj is None:
                 if line.rstrip() == "  {":
                     obj = [line]
@@ -243,7 +278,8 @@ class Arbiter:
                 return
             if props.get("media.class") != "Stream/Output/Audio" or props.get("node.name") in IGNORE:
                 return
-            known = {"source": source_of(props), "state": None, "since": 0.0, "props": props}
+            known = {"source": source_of(props), "state": None, "since": 0.0, "props": props,
+                     "serial": next(self.serial)}
             with self.lock:
                 self.streams[oid] = known
         elif props:
@@ -294,14 +330,29 @@ class Arbiter:
         if not me:
             return
         log(f"{me['source']} started (node {oid})")
-        if oid in self.muted_by_us:
+        # A source that starts anew wins: never leave it muted. WirePlumber applies the mute it
+        # remembers to a new stream (ours from before, or an earlier AirPlay "pause"), and a
+        # restarted arbiter has forgotten what it muted: so ask the stream itself.
+        if oid in self.muted_by_us or me["source"] in self.muted_sources or self.is_muted(oid):
             self.set_mute(oid, False)
         if me["source"] == "Spotify":
-            threading.Thread(target=self.spotify_meta_loop, args=(oid,), daemon=True).start()
+            with self.lock:
+                fresh = oid not in self.meta_loops    # one poller per stream, however often it restarts
+                self.meta_loops.add(oid)
+            if fresh:
+                threading.Thread(target=self.spotify_meta_loop, args=(oid,), daemon=True).start()
         others = {i: s for i, s in self.running().items() if i != oid and i not in self.muted_by_us}
+        # One thread per source: a stuck one (a hung player, BlueZ not answering) must not
+        # delay silencing the others.
+        stoppers = []
         for i, s in others.items():
             log(f"last source wins: stopping {s['source']} (node {i}) for {me['source']}")
-            self.stop_source(i, s)
+            decision(action="stop", source=s["source"], node=i, because=me["source"])
+            t = threading.Thread(target=self.stop_source, args=(i, s), daemon=True)
+            t.start()
+            stoppers.append(t)
+        for t in stoppers:
+            t.join()
 
     def stopped(self, oid):
         with self.lock:
@@ -321,31 +372,64 @@ class Arbiter:
             (i,) = run
             if i in self.muted_by_us:
                 log(f"{run[i]['source']} is the only source again: unmuting (node {i})")
+                decision(action="unmute-survivor", source=run[i]["source"], node=i)
                 self.set_mute(i, False)
 
     def stop_source(self, oid, s):
         src = s["source"]
-        if src == "Spotify":
-            soloist_ctl("pause")
-        elif src == "Radio":
-            mpv_command("stop")
-        elif src == "Bluetooth":
-            self.bt_pause(s["props"].get("api.bluez5.address", ""))
-        else:
-            self.set_mute(oid, True)
+        if src not in ("Spotify", "Radio", "Bluetooth"):
+            self.set_mute(oid, True)           # AirPlay etc.: no remote control, mute it
             return
-        time.sleep(PAUSE_GRACE_S)
-        with self.lock:
-            still = self.streams.get(oid, {}).get("state") == "running"
-        if still:
+
+        def current():
+            """The stream is still the run we were asked to stop: it has neither gone away nor been
+            restarted since (a source that started again meanwhile is the newest, and wins)."""
+            with self.lock:
+                cur = self.streams.get(oid) or {}
+                return (cur.get("state") == "running" and cur.get("serial") == s.get("serial")
+                        and cur.get("since") == s.get("since"))
+
+        def pause():
+            if not current():
+                return
+            try:
+                if src == "Spotify":
+                    soloist_ctl("pause")
+                elif src == "Radio":
+                    mpv_command("stop")
+                else:
+                    self.bt_pause(s["props"].get("api.bluez5.address", ""))
+            except Exception as e:             # a pause that fails is a pause that did not work
+                log(f"{src}: pause request failed: {e!r}")
+        # The request may hang (BlueZ, a stuck player): the grace period runs meanwhile, so
+        # the source is silenced PAUSE_GRACE_S after the request whatever the request does.
+        t0 = time.monotonic()
+        t = threading.Thread(target=pause, daemon=True)
+        t.start()
+        t.join(PAUSE_GRACE_S)
+        time.sleep(max(0.0, PAUSE_GRACE_S - (time.monotonic() - t0)))
+        # (PipeWire reuses node ids: the serial tells this stream from a later one on the same id.)
+        if current():
             log(f"{src} still playing after the pause request: muting (node {oid})")
+            decision(action="mute-fallback", source=src, node=oid)
             self.set_mute(oid, True)
 
+    def is_muted(self, oid):
+        try:
+            r = subprocess.run(["wpctl", "get-volume", str(oid)], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return "[MUTED]" in r.stdout
+
     def set_mute(self, oid, mute):
+        decision(action="mute" if mute else "unmute", node=oid)
         subprocess.run(["wpctl", "set-mute", str(oid), "1" if mute else "0"],
                        capture_output=True, timeout=10)
         with self.lock:
             (self.muted_by_us.add if mute else self.muted_by_us.discard)(oid)
+            source = (self.streams.get(oid) or {}).get("source")
+            if source:
+                (self.muted_sources.add if mute else self.muted_sources.discard)(source)
 
     def bt_pause(self, address):
         """AVRCP Pause on the phone's media player (bluez D-Bus, default policy)."""
@@ -372,6 +456,13 @@ asyncio.run(main(sys.argv[1]))
 
     # --- now playing: Spotify --------------------------------------------------------
     def spotify_meta_loop(self, oid):
+        try:
+            self._spotify_meta_loop(oid)
+        finally:
+            with self.lock:
+                self.meta_loops.discard(oid)
+
+    def _spotify_meta_loop(self, oid):
         """Poll soloist's now-playing while its stream plays (untested: needs a login)."""
         while True:
             with self.lock:
@@ -436,34 +527,46 @@ def airplay_progress(text):
         NOW.position("AirPlay", pos, playing=True)
 
 
+def airplay_item(code, data):
+    """Apply one shairport-sync metadata item (`data` is its base64 payload, or None)."""
+    def text(enc):
+        return base64.b64decode("".join(data.split())).decode(enc, "replace")
+    try:
+        if code == "prgr" and data:
+            airplay_progress(text("ascii"))
+        elif code in FIELDS and data:
+            NOW.set("AirPlay", **{FIELDS[code]: text("utf-8")[:300]})
+        elif code == "pbeg":   # play stream begin: forget the last track
+            NOW.drop("AirPlay", "title", "artist", "album")
+        elif code == "pfls":   # flush: paused (or seeking; prgr follows)
+            NOW.running("AirPlay", False)
+        elif code == "prsm":   # resumed
+            NOW.running("AirPlay", True)
+        elif code == "pend":   # play stream end
+            NOW.clear("AirPlay")
+    except ValueError as e:    # bad base64 from the sender: skip the item, keep reading
+        log(f"airplay metadata item {code!r} ignored: {e}")
+
+
+def airplay_stream(chunks):
+    """Parse the metadata pipe's text, chunk by chunk, until it ends."""
+    buf = ""
+    for chunk in chunks:
+        buf += chunk
+        while True:
+            m = ITEM.search(buf)
+            if not m:
+                buf = buf[-65536:]
+                break
+            buf = buf[m.end():]
+            airplay_item(bytes.fromhex(m.group(2)).decode("ascii", "replace"), m.group(4))
+
+
 def airplay_meta():
     while True:
         try:
             with open(META_PIPE, "r", errors="replace") as f:   # blocks until shairport opens it
-                buf = ""
-                for chunk in iter(lambda: f.read(1024), ""):
-                    buf += chunk
-                    while True:
-                        m = ITEM.search(buf)
-                        if not m:
-                            buf = buf[-65536:]
-                            break
-                        buf = buf[m.end():]
-                        code = bytes.fromhex(m.group(2)).decode("ascii", "replace")
-                        data = m.group(4)
-                        if code == "prgr" and data:
-                            airplay_progress(base64.b64decode("".join(data.split())).decode("ascii", "replace"))
-                        elif code in FIELDS and data:
-                            val = base64.b64decode("".join(data.split())).decode("utf-8", "replace")
-                            NOW.set("AirPlay", **{FIELDS[code]: val})
-                        elif code == "pbeg":   # play stream begin: forget the last track
-                            NOW.drop("AirPlay", "title", "artist", "album")
-                        elif code == "pfls":   # flush: paused (or seeking; prgr follows)
-                            NOW.running("AirPlay", False)
-                        elif code == "prsm":   # resumed
-                            NOW.running("AirPlay", True)
-                        elif code == "pend":   # play stream end
-                            NOW.clear("AirPlay")
+                airplay_stream(iter(lambda: f.read(1024), ""))
         except FileNotFoundError:
             time.sleep(5)
         except OSError as e:

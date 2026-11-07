@@ -659,7 +659,10 @@ class Wifi:
             f = line.split("\t")
             if len(f) < 5:
                 continue
-            bssid, freq, sig, flags, ssid = f[0], int(f[1] or 0), int(f[2] or -100), f[3], unescape(f[4])
+            try:
+                bssid, freq, sig, flags, ssid = f[0], int(f[1] or 0), int(f[2] or -100), f[3], unescape(f[4])
+            except ValueError:
+                continue                       # a garbled line: skip it, keep the other networks
             if not ssid or "\x00" in ssid:
                 continue
             cur = best.get(ssid)
@@ -831,9 +834,15 @@ class Wifi:
                 try:
                     line = self.rfile.readline(65536)
                     try:
-                        reply = wifi.control(json.loads(line))
+                        req = json.loads(line)
+                        if not isinstance(req, dict):
+                            raise ValueError("a request is a JSON object")
+                        reply = wifi.control(req)
                     except (ValueError, TypeError, KeyError) as e:
                         reply = {"error": str(e)}
+                    except Exception as e:          # a bug must not leave the client without an answer
+                        log("control request failed:", repr(e))
+                        reply = {"error": "internal error"}
                     self.wfile.write(json.dumps(reply).encode() + b"\n")
                 except OSError:
                     pass

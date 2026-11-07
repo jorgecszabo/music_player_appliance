@@ -31,6 +31,7 @@ onboard_wifi() {
 derived_mac() {
 	m=$(cat /sys/class/net/"$1"/address 2>/dev/null) || return 1
 	case "$m" in ""|00:00:00:00:00:00) return 1 ;; esac
+	# shellcheck disable=SC2046  # word splitting is the point
 	set -- $(echo "$m" | tr ':' ' ')
 	printf '%02x:%s:%s:%s:%s:%02x\n' $(( (0x$1 | 0x02) & 0xfe )) "$2" "$3" "$4" "$5" $(( 0x$6 ^ 0x01 ))
 }

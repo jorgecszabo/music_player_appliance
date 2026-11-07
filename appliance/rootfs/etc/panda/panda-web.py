@@ -44,6 +44,7 @@ import json
 import os
 import pty
 import re
+import shlex
 import socket
 import subprocess
 import threading
@@ -56,12 +57,19 @@ from urllib.parse import parse_qs, urlparse
 from panda_ipc import bt_call, mpv, mpv_raw, radio_probe, wifi_call
 
 PORT = int(os.environ.get("PANDA_WEB_PORT", "8080"))
-WEB_DIR = "/etc/panda/web"
+# The PANDA_* environment variables are for the test suite (TESTING.md section 12.4):
+# nothing sets them on the appliance.
+CONF_DIR = os.environ.get("PANDA_CONF_DIR", "/etc/panda")
+SPEAKER_RUN = os.environ.get("PANDA_SPEAKER_RUN_DIR", "/run/speaker")
+STATE_DIR = os.environ.get("PANDA_STATE_DIR", "/var/lib/panda-web")
+WEB_DIR = os.environ.get("PANDA_WEB_DIR", "/etc/panda/web")
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/style.css": ("style.css", "text/css; charset=utf-8"),
           "/app.js": ("app.js", "text/javascript; charset=utf-8")}
-ADMIN = ["doas", "-n", "/etc/panda/web-admin.sh"]
-PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR="/run/speaker", XDG_RUNTIME_DIR="/run/speaker")
+ADMIN = shlex.split(os.environ.get("PANDA_ADMIN_CMD", "doas -n /etc/panda/web-admin.sh"))
+PW_ENV = dict(os.environ, PIPEWIRE_RUNTIME_DIR=SPEAKER_RUN, XDG_RUNTIME_DIR=SPEAKER_RUN)
+PERIOD_SCALE = float(os.environ.get("PANDA_PERIOD_SCALE", "1"))     # collector periods, for tests
+RB_BASE = os.environ.get("PANDA_RADIO_BROWSER_BASE")               # e.g. http://127.0.0.1:9000
 MAX_UPLOAD = 1 << 30                 # larger than any bundle (the card has 512 MiB)
 UPLOAD = {}                          # progress of the running/last OTA upload
 UPLOAD_LOCK = threading.Lock()
@@ -109,7 +117,7 @@ def shell_conf(path):
 
 # board.conf SPOTIFY=no: the board has no Soloist build, so no Spotify service,
 # log, key or status.
-SPOTIFY = shell_conf("/etc/panda/board.conf").get("SPOTIFY", "yes") != "no"
+SPOTIFY = shell_conf(CONF_DIR + "/board.conf").get("SPOTIFY", "yes") != "no"
 if not SPOTIFY:
     SERVICES.remove("speaker-soloist")
     RESTARTABLE.discard("speaker-soloist")
@@ -119,7 +127,7 @@ if not SPOTIFY:
 # --- internet radio: radio-browser.info + mpv (speaker-radio) ---------------------------
 RADIO_DNS = "all.api.radio-browser.info"
 RADIO_UA = "PandaSpeaker/1.0 (Alpine Linux audio appliance; panda-web)"
-FAVORITES = "/var/lib/panda-web/radio-favorites.json"
+FAVORITES = STATE_DIR + "/radio-favorites.json"
 STATION_FIELDS = ("stationuuid", "name", "codec", "bitrate", "countrycode", "tags", "votes",
                   "clickcount", "hls")
 RADIO = {"station": None}
@@ -160,8 +168,9 @@ def rb_get(path, params=None, timeout=10, ttl=300):
     if hit and time.monotonic() - hit[0] < ttl and not path.startswith("/json/url/"):
         return hit[1]
     err = None
-    for i, server in enumerate(rb_servers()[:3]):
-        req = urllib.request.Request(f"https://{server}{key}", headers={"User-Agent": RADIO_UA})
+    for i, server in enumerate([RB_BASE] if RB_BASE else rb_servers()[:3]):
+        url = (server if RB_BASE else f"https://{server}") + key
+        req = urllib.request.Request(url, headers={"User-Agent": RADIO_UA})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 data = json.loads(r.read(8 * 1024 * 1024))
@@ -247,6 +256,8 @@ def load_favorites():
     try:
         with open(FAVORITES) as f:
             favs = json.load(f)
+        if not isinstance(favs, list):
+            return []
         return [station_summary(s) for s in favs if isinstance(s, dict)][:100]
     except (OSError, ValueError):
         return []
@@ -412,7 +423,7 @@ class Collector:
             if self.active():
                 for name, period, fn in self.probes:
                     now = time.monotonic()
-                    if now - self.slow_at.get(name, -1e9) >= period:
+                    if now - self.slow_at.get(name, -1e9) >= period * PERIOD_SCALE:
                         self.slow_at[name] = now
                         try:
                             self.slow[name] = fn()
@@ -434,8 +445,8 @@ class Collector:
 
     # --- probes ----------------------------------------------------------------
     def collect(self):
-        board = shell_conf("/etc/panda/board.conf")
-        app = shell_conf("/etc/panda/appliance.conf")
+        board = shell_conf(CONF_DIR + "/board.conf")
+        app = shell_conf(CONF_DIR + "/appliance.conf")
         snap = {
             "time": time.time(),
             "hits": self.hits,
@@ -559,13 +570,13 @@ class Collector:
 
     def nowplaying(self):
         try:
-            with open("/run/speaker/nowplaying.json") as f:
+            with open(SPEAKER_RUN + "/nowplaying.json") as f:
                 return json.load(f)
         except (OSError, ValueError):
             return {}
 
     def tone(self, board):
-        a = shell_conf("/etc/panda/audio.conf")
+        a = shell_conf(CONF_DIR + "/audio.conf")
         def num(v, d=0):
             try:
                 return int(v)
@@ -612,7 +623,7 @@ class Collector:
         return res
 
     def audio(self):
-        board = shell_conf("/etc/panda/board.conf")
+        board = shell_conf(CONF_DIR + "/board.conf")
         # PipeWire's api.alsa.card.name: the card's name, usually its id (AUDIO_CARD).
         self.board_card = board.get("AUDIO_CARD_NAME") or board.get("AUDIO_CARD") or None
         top = self.slow.get("pwtop") or {}
@@ -696,8 +707,8 @@ class Collector:
 
     def effective_output(self, outputs):
         """Where the tone filter plays: the same choice as audio-route.py makes."""
-        board = shell_conf("/etc/panda/board.conf")
-        want = shell_conf("/etc/panda/audio.conf").get("OUTPUT", "onboard")
+        board = shell_conf(CONF_DIR + "/board.conf")
+        want = shell_conf(CONF_DIR + "/audio.conf").get("OUTPUT", "onboard")
         usb = sorted((o for o in outputs if o["usb"]), key=lambda o: o["id"])
         if want == "usb" and usb:
             return usb[0]
@@ -833,7 +844,7 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(url.query)
             arg = lambda k: (q.get(k, [""])[0] or "").strip()[:60]
             order = arg("order") if arg("order") in ("votes", "clickcount", "name") else "votes"
-            page = int(arg("page")) if arg("page").isdigit() else 0
+            page = int(arg("page")) if arg("page").isascii() and arg("page").isdigit() else 0
             page = min(page, 250)
             # One extra row tells whether there's a next page.
             params = {"limit": 41, "offset": page * 40, "hidebroken": "true", "order": order,
@@ -918,7 +929,7 @@ class Handler(BaseHTTPRequestHandler):
                 not self.headers.get("Content-Type", "").startswith("application/json"):
             return self.send_json({"error": "forbidden"}, 403)
         try:
-            n = int(self.headers.get("Content-Length", "0"))
+            n = max(0, int(self.headers.get("Content-Length", "0")))   # -1 would read until EOF
             req = json.loads(self.rfile.read(min(n, 65536)) or b"{}")
             if not isinstance(req, dict):
                 raise ValueError
@@ -1052,7 +1063,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- actions ---------------------------------------------------------------
     def volume(self, req):
-        node = int(req.get("id", -1))
+        try:
+            node = int(req.get("id", -1))
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("unknown node")
         audio = COLLECTOR.status.get("audio") or {}
         ids = {n["id"] for n in audio.get("streams", [])}
         if audio.get("sink"):
@@ -1062,7 +1076,10 @@ class Handler(BaseHTTPRequestHandler):
         if "mute" in req:
             run(["wpctl", "set-mute", str(node), "1" if req["mute"] else "0"], env=PW_ENV)
         if "volume" in req:
-            v = min(1.0, max(0.0, float(req["volume"])))
+            try:
+                v = min(1.0, max(0.0, float(req["volume"])))
+            except (TypeError, ValueError):
+                raise ValueError("volume must be a number")
             run(["wpctl", "set-volume", str(node), f"{v:.3f}"], env=PW_ENV)
             if audio.get("sink") and node == audio["sink"]["id"]:
                 remember_master(v)
@@ -1102,7 +1119,7 @@ class Handler(BaseHTTPRequestHandler):
         name = req.get("name")
         if name == "audio":
             run(ADMIN + ["restart-audio"])
-        elif name in RESTARTABLE:
+        elif isinstance(name, str) and name in RESTARTABLE:
             run(ADMIN + ["restart", name])
         else:
             raise ValueError("not restartable")
@@ -1126,7 +1143,8 @@ class Handler(BaseHTTPRequestHandler):
         raise ValueError("unknown action")
 
     def name(self, req):
-        name = str(req.get("name", "")).strip()
+        name = req.get("name")
+        name = name.strip() if isinstance(name, str) else ""
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._'-]{0,31}", name):
             raise ValueError("names: 1-32 letters, digits, spaces and . _ - '")
         out = run(ADMIN + ["set-name", name], timeout=15)
@@ -1213,6 +1231,8 @@ class Handler(BaseHTTPRequestHandler):
             mpv("set_property", "pause", not radio.get("paused"))
             return
         if action == "toggle":
+            if not RADIO["station"]:
+                raise ValueError("nothing to play")     # e.g. the page restarted while the radio played
             uuid = RADIO["station"]["stationuuid"]
         else:
             uuids = [f["stationuuid"] for f in load_favorites()]
@@ -1228,7 +1248,7 @@ class Handler(BaseHTTPRequestHandler):
     def audio_settings(self, req):
         try:
             b, t, c, u = (int(req.get(k)) for k in ("bass", "treble", "cap", "usb_cap"))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise ValueError("bass, treble, cap and usb_cap must be integers")
         o = req.get("output")
         if o not in ("onboard", "usb"):

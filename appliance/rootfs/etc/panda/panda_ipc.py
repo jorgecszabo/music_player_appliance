@@ -13,11 +13,15 @@ Scripts in /etc/panda import this as `import panda_ipc` (the script's own
 directory is first on sys.path).
 """
 import json
+import os
 import socket
 
-BT_SOCK = "/run/panda/bt.sock"
-WIFI_SOCK = "/run/panda/wifi.sock"
-MPV_SOCK = "/run/speaker/radio.sock"
+# PANDA_RUN_DIR / PANDA_SPEAKER_RUN_DIR are for the test suite; nothing sets them on the appliance.
+_RUN = os.environ.get("PANDA_RUN_DIR", "/run/panda")
+_SPEAKER_RUN = os.environ.get("PANDA_SPEAKER_RUN_DIR", "/run/speaker")
+BT_SOCK = _RUN + "/bt.sock"
+WIFI_SOCK = _RUN + "/wifi.sock"
+MPV_SOCK = _SPEAKER_RUN + "/radio.sock"
 
 
 def line_call(sock, req, timeout=5, name="service"):

@@ -25,7 +25,7 @@ source "$(dirname "$0")/env.sh"
 UBOOT_BIN=u-boot-sunxi-with-spl.bin
 SPL_SECTOR=16          # 8 KiB: where the A10 boot ROM looks
 PART_SECTOR=8192       # 4 MiB
-PART_MIB=512
+PART_MIB=1536
 
 IMAGE=""
 if [ "${1:-}" = --image ]; then

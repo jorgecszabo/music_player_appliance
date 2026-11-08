@@ -7,7 +7,7 @@
 #   staging-dir: directory whose contents are copied to the FAT partition
 #                after MLO/u-boot.img (optional, normally build/sdimage/<board>).
 #
-# Layout: MBR, p1 = FAT32 (LBA, type 0x0c), boot flag, 512 MiB starting at 4 MiB
+# Layout: MBR, p1 = FAT32 (LBA, type 0x0c), boot flag, 1.5 GiB (1536 MiB) starting at 4 MiB
 # (sector 8192: room for the BeagleBoard-xM's ~760 KiB u-boot.img in raw mode).
 # The boot files go in twice, so either OMAP3/4 ROM boot method works:
 #   raw:  MLO at sector 256 (128 KiB), u-boot.img at sector 768 (384 KiB)
@@ -50,7 +50,7 @@ for p in $(lsblk -lno PATH "$DEV" | tail -n +2); do umount "$p" 2>/dev/null || t
 wipefs -a "$DEV" >/dev/null
 sfdisk -q "$DEV" <<SFDISK
 label: dos
-start=8192, size=512MiB, type=c, bootable
+start=8192, size=1536MiB, type=c, bootable
 SFDISK
 partprobe "$DEV"; udevadm settle
 PART=$(lsblk -lno PATH "$DEV" | sed -n 2p)

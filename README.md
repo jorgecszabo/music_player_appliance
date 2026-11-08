@@ -84,6 +84,7 @@ make rebuild-packages BOARD=rpi1       # force a step and everything after it
 sudo boards/rpi1/write-sdcard.sh /dev/sdX build/sdimage/rpi1   # erases the card
 # (pcduino also: boards/pcduino/write-sdcard.sh --image card.img build/sdimage/pcduino,
 #  no root, then one dd onto the card)
+sudo scripts/grow-sdcard.sh /dev/sdX     # card written before the 1.5 GiB layout: grow its boot partition in place
 ```
 
 Packages and kernels are built in containers, so an apk deleted by hand isn't

@@ -21,7 +21,7 @@ set -euo pipefail
 : "${BOARD:?run boards/<board>/write-sdcard.sh}"
 source "$(dirname "$0")/env.sh"
 PART_SECTOR=8192       # 4 MiB
-PART_MIB=512
+PART_MIB=1536
 
 IMAGE=""
 if [ "${1:-}" = --image ]; then

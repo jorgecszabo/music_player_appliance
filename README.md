@@ -48,7 +48,7 @@ Wi-Fi setup, logs and updates.
 
 You can try it without a board: download [docs/panel-demo.html](docs/panel-demo.html)
 and open it in a browser. It's the real page with made-up data and doesn't talk to
-a speaker. `scripts/build-demo.sh` rebuilds the file and the screenshot.
+a speaker. `make demo` rebuilds the file and the screenshot.
 
 ## Supported boards
 
@@ -91,7 +91,7 @@ noticed: use `make rebuild-<step>` (`container`, `kernel`, `uboot`, `packages`,
 `image`, `ota`). After clearing podman's storage (e.g. `podman system reset`) run
 `make rebuild-container`; `keys/` and `packages/` survive.
 
-Packages go to `packages/main/<arch>/`; `build-image.sh` takes our packages from
+Packages go to `packages/main/<arch>/`; the image build takes our packages from
 there, and everything else from Alpine's mirrors. Without the Soloist runtime
 the image still builds, but Spotify won't work. A board with `SPOTIFY=no` in
 board.conf (rpi1: Soloist is ARMv7 and up) leaves Spotify out entirely. The image never contains the
@@ -131,11 +131,11 @@ settings on top. Cards written before the root
 image (an `apks/` repository in the slot) can't update to it: write them again.
 
 ```sh
-scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
+make ota BOARD=rpi1             # -> build/ota/panda-rpi1-<version>.pota
 ```
 
-`make ota` does the same and reuses an up-to-date image. It needs the build
-container and the packages from "Build an image" above.
+It builds (or reuses) the image first, so it needs the signing key and Soloist
+runtime from "Build an image" above.
 
 Install it on the web page (System Update: Browse..., Install, restart), or over SSH:
 
@@ -220,7 +220,7 @@ so upstream fixes only arrive when we rebuild. `scripts/check-forks.sh` lists
 the forks and board kernels that are behind Alpine or kernel.org (exit 1).
 To update a fork: take Alpine's new APKBUILD, reapply the changes listed in
 the fork's header, set `_upstream_base`, keep `pkgrel=100`, and rebuild with
-`scripts/build-package.sh <name>`.
+`make packages` (changed APKBUILDs are noticed; or `make rebuild-packages`).
 
 ## Debugging
 
@@ -256,7 +256,7 @@ Steps:
    button, `nf_tables`, and a fast entropy source (getrandom must not block at boot).
 5. Write `write-sdcard.sh` for the board's boot ROM (OMAP: `scripts/write-sdcard-omap.sh`,
    Allwinner: `scripts/write-sdcard-sunxi.sh`, Raspberry Pi 1: `scripts/write-sdcard-rpi.sh`), then
-   `BOARD=<board> scripts/build-package.sh <kernel> && BOARD=<board> scripts/build-image.sh`.
+   `make image BOARD=<board>` (it builds the kernel and packages first).
 6. On the device, find the real names and put them in board.conf: `cat /proc/asound/cards`
    (AUDIO_CARD), `wpctl status` (AUDIO_PW_SINK), `amixer` (AUDIO_HW_VOLUME_*),
    `cat /proc/bus/input/devices` (BUTTON_*), `ls /sys/class/leds /sys/class/watchdog`.

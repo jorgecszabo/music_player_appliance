@@ -37,6 +37,10 @@ PANDA_HOST=panda@192.168.0.55 scripts/deploy.sh --restart   # live install into 
 SMOKE_SSH=panda@192.168.0.55 scripts/smoke.sh 192.168.0.55
 ```
 
+`Makefile` chains the build scripts for one board (`make ota BOARD=rpi1`, `make help`) with stamp
+files in `build/.stamps/<board>/`. Keep it in sync: when a build script, its inputs, the build
+order, or the list of packages changes, update the Makefile in the same commit.
+
 Ruff only enforces real bugs (`F`, `E9`), not style. Python targets 3.11 and the appliance code is
 stdlib only (except `panda-bt.py`, which uses dbus-next). Shell scripts on the device are busybox ash
 (`#!/bin/sh`); build scripts are bash.

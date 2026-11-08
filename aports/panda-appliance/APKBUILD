@@ -4,8 +4,8 @@
 # panda-board-<board> subpackages carry boards/<board>/board.conf.
 #
 # Packaged (instead of shipped in the lbu overlay) so that the overlay holds
-# settings only and an OTA update can replace the code: at boot, files in the
-# overlay win over package files (apk --overlay-from-stdin --clean-protected).
+# settings only and an OTA update can replace the code: at boot, the overlay is
+# unpacked over the slot's root image, so its files win over package files.
 #
 # Built from the project tree mounted at /work (scripts/build-appliance.sh),
 # not from a source tarball. The version comes from build/panda-appliance.version
@@ -21,6 +21,8 @@ license="custom"
 depends="$(sed 's/#.*//' "$_src"/appliance/packages.list | tr -s ' \t\n' ' ')"
 _boards="$(for d in "$_src"/boards/*/; do b=${d%/}; b=${b##*/}; [ "$b" = _template ] || echo "$b"; done)"
 subpackages="$(for b in $_boards; do printf 'panda-board-%s:_board ' "$b"; done)"
+# The service users (speaker, panda-web, panda-lcd).
+install="$pkgname.pre-install"
 source=""
 options="!check !strip"
 

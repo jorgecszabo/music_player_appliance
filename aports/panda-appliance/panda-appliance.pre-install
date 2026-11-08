@@ -1,0 +1,21 @@
+#!/bin/sh
+# The appliance's service users. Created here, at image build time, so they are in the
+# root image with the other system users (SQUASHFS-ROOT.md: the image's users win at boot).
+addgroup -S speaker 2>/dev/null
+adduser -S -D -H -h /var/lib/speaker -s /sbin/nologin -G speaker -g "Audio services" speaker 2>/dev/null
+addgroup speaker audio 2>/dev/null
+
+# Web control panel: PipeWire via group speaker, privileged actions only through
+# doas + /etc/panda/web-admin.sh (/etc/doas.d/panda-web.conf).
+addgroup -S panda-web 2>/dev/null
+adduser -S -D -H -h /var/lib/panda-web -s /sbin/nologin -G panda-web -g "Web control panel" panda-web 2>/dev/null
+addgroup panda-web speaker 2>/dev/null
+
+# Front panel (boards with board.conf LCD_FB): framebuffer, buttons and touch, PipeWire
+# for the spectrum. On every board: the user costs nothing where the service is off.
+addgroup -S panda-lcd 2>/dev/null
+adduser -S -D -H -h /var/lib/panda-lcd -s /sbin/nologin -G panda-lcd -g "Front panel" panda-lcd 2>/dev/null
+for g in video input speaker; do
+	addgroup panda-lcd "$g" 2>/dev/null
+done
+exit 0

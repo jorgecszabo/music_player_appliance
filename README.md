@@ -2,8 +2,8 @@
 
 A network speaker for old ARM boards. It plays Spotify Connect, AirPlay,
 Bluetooth and internet radio through the board's headphone jack or a USB DAC, and
-you control it from a web page. It runs from RAM off a read-only SD card, so you
-can pull the plug at any time.
+you control it from a web page. The system is a read-only image on the SD card and
+everything it writes goes to RAM, so you can pull the plug at any time.
 
 ## Features
 
@@ -131,8 +131,11 @@ RTL8188SU/8191SU/8192SU USB Wi-Fi) for every board kernel; see
 ## Updates (OTA)
 
 The card holds two versions (slots A and B, `slots/<x>/` on the boot partition:
-kernel, initramfs, modules, the package repository). An update goes into the slot
-that isn't running; the other one stays untouched.
+kernel, initramfs, modules, the root image `rootfs.squashfs`). An update goes into
+the slot that isn't running; the other one stays untouched. The boot mounts the
+slot's root image read-only with a RAM overlay for writes and unpacks the saved
+settings on top ([SQUASHFS-ROOT.md](SQUASHFS-ROOT.md)). Cards written before the root
+image (an `apks/` repository in the slot) can't update to it: write them again.
 
 ```sh
 scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
@@ -148,8 +151,8 @@ ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-install' < build/ota/pan
 ssh panda@panda.local 'doas /etc/panda/web-admin.sh ota-activate b'    # the slot it reported; reboots
 ```
 
-The new version starts on trial. Early in its boot the boot menu points back at the
-old slot, so a crash or a hang (watchdog) returns to the old version. After about a
+The new version starts on trial. Its initramfs points the boot menu back at the
+old slot first thing, so a crash or a hang (watchdog) returns to the old version. After about a
 minute, once the services and the web page are up, the new version is kept. If it
 stays unhealthy for 5 minutes, the board reboots into the old version and restores the
 settings from before the update. Bundles are signed
@@ -159,8 +162,8 @@ with the abuild key (`keys/`) and only install on the board they were built for.
 The code is the `panda-appliance` package (`aports/panda-appliance`, from
 `appliance/rootfs`); the lbu overlay holds settings only. To try code without an
 update: `scripts/deploy.sh [--restart]` (`PANDA_HOST=user@host` if it isn't
-`panda@panda.local`) installs the package into the running system; the next boot runs
-the slot's version again.
+`panda@panda.local`) installs the package into the running system (the RAM overlay); the
+next boot runs the slot's version again.
 
 Recovery without the web page: the boot menu on the serial console lists both slots,
 or edit `extlinux/extlinux.conf` (`DEFAULT a` / `DEFAULT b`) on a PC.
@@ -197,7 +200,7 @@ installs nothing on the board. It plays a real radio station, restarts the radio
 sends malformed requests, and prints a checklist for the parts that need a phone.
 
 ```sh
-# 1. Put the code under test on the board, live: it runs from RAM until the next reboot
+# 1. Put the code under test on the board, live (RAM overlay): it stays until the next reboot
 PANDA_HOST=panda@192.168.0.55 scripts/deploy.sh --restart
 # 2. Test it (SMOKE_SSH adds process, memory and kernel-log checks)
 SMOKE_SSH=panda@192.168.0.55 scripts/smoke.sh 192.168.0.55
@@ -219,7 +222,7 @@ through OTA first (see "Updates"), then run step 2.
 
 `aports/` holds forks of Alpine packages: shairport-sync (native PipeWire
 backend), and pipewire and mpv without the GPU stack (Alpine's builds pull in
-mesa and llvm, ~170 MB of RAM on a diskless board). They win over Alpine's
+mesa and llvm, ~170 MB more in every root image). They win over Alpine's
 builds (pkgrel 100) and setup.sh keeps `!mesa` and `!libcamera` in the world,
 so upstream fixes only arrive when we rebuild. `scripts/check-forks.sh` lists
 the forks and board kernels that are behind Alpine or kernel.org (exit 1).

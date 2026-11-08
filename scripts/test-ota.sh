@@ -35,7 +35,7 @@ mkdir -p "$T/keys"; cp "$PROJECT_DIR"/keys/*.rsa.pub "$T/keys/"; export PANDA_OT
 
 boot_slot a
 ota boot 2>/dev/null
-check "boot: repositories point at slot a" grep -qx "/media/${BOOT_MEDIA}/slots/a/apks" "$T/media/.run/repositories"
+check "boot: the booted slot is recorded" grep -qx a "$T/media/.run/slot"
 
 # --- bad bundles -------------------------------------------------------------------
 mk() { python3 -I - "$BUNDLE" "$T/$1" "$1" <<'PY'
@@ -74,14 +74,17 @@ ota install < "$BUNDLE" > "$T/out" 2>&1 || { cat "$T/out"; bad install; }
 check "install: slot b complete" test -f "$T/media/slots/b/slot.json"
 check "install: default stays a" test "$(default)" = a
 check "install: slot b has a boot entry" test -n "$(entry b)"
-check "install: slot b boots its own modloop/repo" sh -c 'echo "$1" | grep -q "modloop=/slots/b/boot/modloop-.* alpine_repo=/media/$2/slots/b/apks panda_slot=b"' _ "$(entry b)" "$BOOT_MEDIA"
+check "install: slot b has its root image" test -s "$T/media/slots/b/rootfs.squashfs"
+check "install: slot b boots its own modloop/root image" sh -c 'echo "$1" | grep -q "modloop=/slots/b/boot/modloop-.* panda_root=/slots/b/rootfs.squashfs panda_slot=b"' _ "$(entry b)"
 ota activate > /dev/null 2>&1
 check "activate: default b, state trial=b" test "$(default) $(state)" = "b confirmed=a trial=b "
+check "activate: the rollback config is armed for the initramfs" test -n "$(find "$T/media" -name '*.armed')"
 check "activate: settings snapshot in slot a" cmp -s "$T/media/panda.apkovl.tar.gz" "$T/media/slots/a/settings.apkovl.tar.gz"
 check "install refused during a trial" sh -c '! python3 -I "$0" install < "$1" >/dev/null 2>&1' "$OTA" "$BUNDLE"
 boot_slot b
 ota boot 2>/dev/null
 check "trial boot: rollback armed (default a)" test "$(default)" = a
+check "trial boot: no armed configs left" test -z "$(find "$T/media" -name '*.armed')"
 ota confirm 2>/dev/null
 check "confirm: default b, confirmed=b" test "$(default) $(state)" = "b confirmed=b "
 

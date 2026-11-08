@@ -1,11 +1,11 @@
 #!/bin/sh
 # Appliance setup, run on the device as root: at every boot by the panda-setup
 # service (--boot), and again after a rename (web-admin.sh set-name).
-# Idempotent, offline, no package installs: the packages come from the booted
-# slot's repository (world: panda-appliance panda-board-<board>), the code from
-# the panda-appliance package. This makes the running system match this
-# version: generated configs (gen-configs.sh), service users, setting defaults,
-# enabled services. The lbu overlay holds settings only (PLAN.md, OTA updates).
+# Idempotent, offline, no package installs: the packages and the code are in the
+# booted slot's root image (SQUASHFS-ROOT.md). This makes the running system
+# match this version: users and groups (the image's), generated configs
+# (gen-configs.sh), setting defaults, enabled services. The lbu overlay holds
+# settings only (PLAN.md, OTA updates).
 #
 #   setup.sh          regenerate and save (lbu commit)
 #   setup.sh --boot   at boot: save only when this version runs for the first
@@ -18,15 +18,20 @@ BOOT=""
 
 log() { echo "panda-setup: $*"; logger -t panda-setup "$*" 2>/dev/null || true; }
 
-# --- Repositories: the booted slot's (panda-ota boot), then the online ones -------
+# --- Users and groups: the root image's, plus the saved admin user and passwords ---
+# (the overlay's saved passwd/group/shadow replace the image's at boot)
+if [ -d /media/root-ro/etc ]; then
+	python3 /etc/panda/merge-users.py /media/root-ro/etc /etc
+fi
+
+# --- Repositories: the online ones (the image has none; deploy.sh installs files) --
 rel="v$(cut -d. -f1,2 /etc/alpine-release)"
 mirror="${ALPINE_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
 for repo in main community; do
 	grep -qx "$mirror/$rel/$repo" /etc/apk/repositories 2>/dev/null \
 		|| echo "$mirror/$rel/$repo" >> /etc/apk/repositories
 done
-# No apk cache on the card: the slot's repository has every package, and a cache
-# shared by both slots would mix versions.
+# No apk cache on the card: a cache shared by both slots would mix versions.
 [ -L /etc/apk/cache ] && rm -f /etc/apk/cache
 
 # --- What lbu saves: settings only (rules in /etc/panda/lbu-paths.list). Copied
@@ -42,34 +47,13 @@ if [ -f /etc/apk/protected_paths.d/lbu.list ]; then
 		/etc/apk/protected_paths.d/lbu.list
 fi
 
-# --- Service users ------------------------------------------------------------------
-if ! id speaker >/dev/null 2>&1; then
-	log "creating system user speaker"
-	addgroup -S speaker
-	adduser -S -D -H -h /var/lib/speaker -s /sbin/nologin -G speaker -g "Audio services" speaker
-fi
-addgroup speaker audio 2>/dev/null || true
+# --- State directories of the service users (panda-appliance creates the users).
+# Recursive: saved files come back with the uid they had when saved.
 mkdir -p /var/lib/panda-web
-# Web control panel: PipeWire via group speaker, privileged actions only
-# through doas + /etc/panda/web-admin.sh (/etc/doas.d/panda-web.conf).
-if ! id panda-web >/dev/null 2>&1; then
-	log "creating system user panda-web"
-	addgroup -S panda-web
-	adduser -S -D -H -h /var/lib/panda-web -s /sbin/nologin -G panda-web -g "Web control panel" panda-web
-fi
-addgroup panda-web speaker 2>/dev/null || true
-chown panda-web:panda-web /var/lib/panda-web
-# Front panel (board.conf LCD_FB): framebuffer, buttons and touch, PipeWire for
-# the spectrum. Its calibration is saved (panda.list).
+chown -R panda-web:panda-web /var/lib/panda-web
 if [ -n "${LCD_FB:-}" ]; then
-	if ! id panda-lcd >/dev/null 2>&1; then
-		log "creating system user panda-lcd"
-		addgroup -S panda-lcd
-		adduser -S -D -H -h /var/lib/panda-lcd -s /sbin/nologin -G panda-lcd -g "Front panel" panda-lcd
-	fi
-	for g in video input speaker; do addgroup panda-lcd "$g" 2>/dev/null || true; done
 	mkdir -p /var/lib/panda-lcd
-	chown panda-lcd:panda-lcd /var/lib/panda-lcd
+	chown -R panda-lcd:panda-lcd /var/lib/panda-lcd
 fi
 
 # --- Tone, headroom and volume cap (/etc/panda/audio.conf, the owner's settings) ---

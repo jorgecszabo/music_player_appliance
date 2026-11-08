@@ -6,14 +6,16 @@
   panda-ota.py activate [slot]   boot <slot> (default: the standby one) on trial at the
                                  next boot; the caller reboots
   panda-ota.py boot              early boot (panda-ota-boot): arm the rollback on a trial
-                                 boot; after a failed trial, restore the settings
+                                 boot (the initramfs did it already); after a failed trial,
+                                 restore the settings
   panda-ota.py confirm           health check of a trial boot (panda-ota-confirm):
                                  healthy -> keep the new slot, else reboot (rollback)
   panda-ota.py write-boot        rewrite the bootloader config from the slots and state
 
 Layout on the boot medium (/media/<BOOT_MEDIA>, board.conf):
-  slots/<x>/boot/ apks/ extlinux.label chimes/ soloist-runtime.squashfs
-            factory.apkovl.tar.gz      what the bundle carried
+  slots/<x>/boot/ rootfs.squashfs extlinux.label chimes/ soloist-runtime.squashfs
+            factory.apkovl.tar.gz      what the bundle carried (rootfs.squashfs: the
+                                       root image, panda_root= on the kernel command line)
   slots/<x>/slot.json                  written last: a slot without it is incomplete
   slots/<x>/settings.apkovl.tar.gz     the settings as they were when <x> was left
   slots/state                          "confirmed=<x>" and "trial=<y>" lines
@@ -30,6 +32,11 @@ The bootloader side is the only board-specific part: board.conf OTA_BOOT_SCHEME
                       the kernel, initramfs, cmdline.txt, DTBs and overlays/ from the
                       slot. Each slot's cmdline.txt is written here.
 Both read the slot's boot entry from its extlinux.label (the image's first LABEL).
+
+Trial boots: activate also writes the boot config that boots the confirmed slot next to the
+live one, as <file>.armed. The initramfs (panda_arm_rollback in our init) renames it over
+the live file on the trial boot, before anything can fail; panda-ota-boot does the same
+later from Python. Every other write_boot() removes stale *.armed files.
 """
 import glob
 import hashlib
@@ -49,9 +56,9 @@ SLOTS = ("a", "b")
 KEYS_DIR = "/etc/panda/ota-keys"
 LOCK = "/run/panda/media.lock"
 MAX_MANIFEST = 1 << 20
-FORMAT = 1
+FORMAT = 2   # 2: the slot root is rootfs.squashfs (1: an apks/ repository)
 # What a bundle may carry (paths relative to the slot).
-ALLOWED = re.compile(r"^(boot/[A-Za-z0-9._+/-]+|apks/[A-Za-z0-9._+/-]+|chimes/[A-Za-z0-9._-]+"
+ALLOWED = re.compile(r"^(boot/[A-Za-z0-9._+/-]+|rootfs\.squashfs|chimes/[A-Za-z0-9._-]+"
                      r"|extlinux\.label|soloist-runtime\.squashfs|factory\.apkovl\.tar\.gz"
                      r"|uboot/[A-Za-z0-9._-]+"
                      r"|[A-Za-z0-9._+-]+\.dtb|overlays/[A-Za-z0-9._+-]+)$")   # rpi: DTBs in the slot
@@ -107,8 +114,6 @@ TEST = os.environ.get("PANDA_OTA_TEST") == "1"
 BOARD = shell_conf(os.environ.get("PANDA_OTA_BOARD_CONF", "/etc/panda/board.conf"))
 MEDIA = os.environ.get("PANDA_OTA_MEDIA") or "/media/" + BOARD.get("BOOT_MEDIA", "mmcblk0p1")
 CMDLINE = os.environ.get("PANDA_OTA_CMDLINE_FILE", "/proc/cmdline")
-# The boot medium as the booted system sees it (kernel command line paths).
-DEVICE_MEDIA = "/media/" + BOARD.get("BOOT_MEDIA", "mmcblk0p1")
 if TEST:
     LOCK = MEDIA + "/.media.lock"
     KEYS_DIR = os.environ.get("PANDA_OTA_KEYS", KEYS_DIR)
@@ -217,9 +222,13 @@ def overlay_path():
 
 # --- Bootloader schemes ---------------------------------------------------------------
 
+# Kernel command line options the slot's boot entry gets here (the image's are replaced).
+SLOT_OPTS = ("modloop=", "alpine_repo=", "panda_root=", "panda_slot=", "panic=")
+
+
 def extlinux_entry(slot):
     """The slot's boot entry: its extlinux.label (the image's extlinux.conf) with the
-    paths moved into the slot and the slot's modloop/repository on the command line."""
+    paths moved into the slot and the slot's modloop/root image on the command line."""
     text = open(f"{SLOTS_DIR}/{slot}/extlinux.label").read()
     info = slot_info(slot) or {}
     keep = []
@@ -241,7 +250,7 @@ def extlinux_entry(slot):
     extra = []
     if modloop:
         extra.append(f"modloop=/slots/{slot}/boot/{os.path.basename(modloop[0])}")
-    extra += [f"alpine_repo={DEVICE_MEDIA}/slots/{slot}/apks", f"panda_slot={slot}", "panic=10"]
+    extra += [f"panda_root=/slots/{slot}/rootfs.squashfs", f"panda_slot={slot}", "panic=10"]
     out = [f"LABEL {slot}",
            f"  MENU LABEL Panda {info.get('version', '?')} (slot {slot})"]
     seen_append = False
@@ -252,7 +261,7 @@ def extlinux_entry(slot):
             val = ",".join(f"/slots/{slot}/{p.strip().lstrip('/')}" for p in val.split(","))
         elif k == "APPEND":
             val = " ".join(o for o in val.split()
-                           if not o.startswith(("modloop=", "alpine_repo=", "panda_slot=", "panic=")))
+                           if not o.startswith(SLOT_OPTS))
             val = (val + " " + " ".join(extra)).strip()
             seen_append = True
         out.append(f"  {key} {val}")
@@ -261,7 +270,7 @@ def extlinux_entry(slot):
     return "\n".join(out) + "\n"
 
 
-def write_extlinux(default):
+def write_extlinux(default, armed=None):
     slots = [s for s in SLOTS if slot_info(s) and os.path.exists(f"{SLOTS_DIR}/{s}/extlinux.label")]
     if default not in slots:
         raise ValueError(f"slot {default} isn't installed")
@@ -276,6 +285,7 @@ def write_extlinux(default):
     for d in (MEDIA + "/boot/extlinux", MEDIA + "/extlinux"):
         os.makedirs(d, exist_ok=True)
         write_atomic(d + "/extlinux.conf", conf(default))
+        write_armed(d + "/extlinux.conf", armed in slots and conf(armed))
     # For a bootloader with boot counting (altbootcmd): the other slot, if any.
     fb = other(default) if other(default) in slots else default
     write_atomic(MEDIA + "/extlinux/fallback.conf", conf(fb))
@@ -304,19 +314,19 @@ def slot_entry(slot):
             entry["initrd"] = val.strip().lstrip("/")
         elif k == "APPEND":
             entry["append"] = " ".join(o for o in val.split()
-                                       if not o.startswith(("modloop=", "alpine_repo=", "panda_slot=", "panic=")))
+                                       if not o.startswith(SLOT_OPTS))
     if not entry["kernel"]:
         raise ValueError(f"slot {slot}: no KERNEL in extlinux.label")
     modloop = sorted(glob.glob(f"{SLOTS_DIR}/{slot}/boot/modloop-*"))
     extra = []
     if modloop:
         extra.append(f"modloop=/slots/{slot}/boot/{os.path.basename(modloop[0])}")
-    extra += [f"alpine_repo={DEVICE_MEDIA}/slots/{slot}/apks", f"panda_slot={slot}", "panic=10"]
+    extra += [f"panda_root=/slots/{slot}/rootfs.squashfs", f"panda_slot={slot}", "panic=10"]
     entry["append"] = (entry["append"] + " " + " ".join(extra)).strip()
     return entry
 
 
-def write_rpi(default):
+def write_rpi(default, armed=None):
     """Raspberry Pi firmware: slots/<x>/cmdline.txt for every slot, then slot.txt (the
     one line that picks the slot; config.txt includes it)."""
     slots = [s for s in SLOTS if slot_info(s) and os.path.exists(f"{SLOTS_DIR}/{s}/extlinux.label")]
@@ -332,24 +342,41 @@ def write_rpi(default):
             same = False
         if not same:
             write_atomic(path, want)
-    e = entries[default]
-    text = ("# Generated by /etc/panda/panda-ota.py. Don't edit: rewritten on updates.\n"
-            "# The firmware loads kernel, initramfs, cmdline.txt, DTBs and overlays/ from here.\n"
-            f"os_prefix=slots/{default}/\n"
-            f"kernel={e['kernel']}\n")
-    if e["initrd"]:
-        text += f"initramfs {e['initrd']} followkernel\n"
-    write_atomic(MEDIA + "/slot.txt", text)
+
+    def text(dflt):
+        e = entries[dflt]
+        out = ("# Generated by /etc/panda/panda-ota.py. Don't edit: rewritten on updates.\n"
+               "# The firmware loads kernel, initramfs, cmdline.txt, DTBs and overlays/ from here.\n"
+               f"os_prefix=slots/{dflt}/\n"
+               f"kernel={e['kernel']}\n")
+        if e["initrd"]:
+            out += f"initramfs {e['initrd']} followkernel\n"
+        return out
+    write_atomic(MEDIA + "/slot.txt", text(default))
+    write_armed(MEDIA + "/slot.txt", armed in entries and text(armed))
+
+
+def write_armed(path, text):
+    """<path>.armed: the boot config the initramfs puts in place on a trial boot (text),
+    or none (None: removed)."""
+    if text:
+        write_atomic(path + ".armed", text)
+    else:
+        try:
+            os.remove(path + ".armed")
+        except FileNotFoundError:
+            pass
 
 
 SCHEMES = {"extlinux": write_extlinux, "rpi": write_rpi}
 
 
-def write_boot(default):
+def write_boot(default, armed=None):
+    """Boot `default` next. armed: the slot a trial boot of `default` falls back to."""
     scheme = BOARD.get("OTA_BOOT_SCHEME", "extlinux") or "extlinux"
     if scheme not in SCHEMES:
         raise ValueError(f"OTA_BOOT_SCHEME={scheme} is not supported")
-    SCHEMES[scheme](default)
+    SCHEMES[scheme](default, armed)
 
 
 # --- Commands ---------------------------------------------------------------------
@@ -443,8 +470,8 @@ def cmd_install(stream):
     for need in ("extlinux.label",):
         if need not in files:
             die(f"manifest: no {need}")
-    if not any(p.startswith("apks/") for p in files) or not any(p.startswith("boot/") for p in files):
-        die("manifest: no boot/ or apks/")
+    if "rootfs.squashfs" not in files or not any(p.startswith("boot/") for p in files):
+        die("manifest: no boot/ or rootfs.squashfs")
     total = sum(f["size"] for f in files.values())
     log(f"bundle {man.get('version')} ({total} bytes, {len(files)} files, key {key}) -> slot {target}")
     print(json.dumps({"stage": "verified", "version": man.get("version"), "total": total,
@@ -536,7 +563,7 @@ def cmd_activate(slot=None):
         st["trial"] = slot
         st["failed"] = None
         write_state(st)
-        write_boot(slot)
+        write_boot(slot, armed=booted)
     log(f"slot {slot} ({slot_info(slot).get('version')}) boots next, on trial")
     print(json.dumps({"ok": True, "slot": slot, "version": slot_info(slot).get("version")}))
 
@@ -549,16 +576,6 @@ def cmd_boot():
     open(run_dir + "/slot", "w").write((booted or "") + "\n")
     if not booted:
         return
-    # apk's repository for this boot: the slot's (the overlay may name another).
-    repo = f"{DEVICE_MEDIA}/slots/{booted}/apks"
-    repofile = MEDIA + "/.run/repositories" if TEST else "/etc/apk/repositories"
-    try:
-        lines = open(repofile).read().splitlines()
-    except OSError:
-        lines = []
-    new = [repo] + [l for l in lines if l.strip() and not l.startswith(DEVICE_MEDIA + "/")]
-    if new != lines:
-        open(repofile, "w").write("\n".join(new) + "\n")
     st = read_state()
     if not st["trial"]:
         return

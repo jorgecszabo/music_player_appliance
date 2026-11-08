@@ -9,7 +9,7 @@
 # Format (see /etc/panda/panda-ota.py): an uncompressed tar of manifest.json,
 # manifest.sig (RSA-SHA256 over manifest.json with the abuild key; the device
 # trusts the keys panda-appliance ships in /etc/panda/ota-keys/), then the
-# slot's files: boot/ apks/ extlinux.label chimes/ factory.apkovl.tar.gz.
+# slot's files: boot/ rootfs.squashfs extlinux.label chimes/ factory.apkovl.tar.gz.
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 [ "${1:-}" = "--no-build" ] || "$PROJECT_DIR/scripts/build-image.sh"
@@ -44,7 +44,7 @@ for root, dirs, names in os.walk(slot):
             for chunk in iter(lambda: f.read(1 << 20), b""):
                 h.update(chunk)
         files.append({"path": rel, "size": os.path.getsize(full), "sha256": h.hexdigest()})
-man = {"format": 1, **{k: info.get(k) for k in ("version", "git", "built", "board", "arch", "kernel")},
+man = {"format": 2, **{k: info.get(k) for k in ("version", "git", "built", "board", "arch", "kernel")},
        "files": files}
 json.dump(man, open(out, "w"), indent=1)
 print(f"{len(files)} files, {sum(f['size'] for f in files) >> 20} MiB")

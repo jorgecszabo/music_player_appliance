@@ -1,0 +1,138 @@
+--- a/initramfs-init
++++ b/initramfs-init
+@@ -487,6 +487,63 @@
+ 	fi
+ }
+ 
++# Panda appliance (SQUASHFS-ROOT.md in the panda repository). panda_root=<path> on
++# the kernel command line: the root is a read-only squashfs image at <path> on the
++# boot medium, with a tmpfs overlay for writes. The apkovl is unpacked on top as
++# usual; no packages are installed.
++panda_media() {
++	local m
++	for m in "$ROOT"/media/*; do
++		if [ -d "$m/slots" ]; then
++			echo "$m"
++			return 0
++		fi
++	done
++	return 1
++}
++
++# An OTA trial boot (panda-ota.py activate) of this slot: from now on any reboot goes
++# back to the confirmed slot. panda-ota.py left that boot config next to the live one
++# (*.armed); panda-ota-confirm makes this slot the default again once it is healthy.
++panda_arm_rollback() {
++	local m="$1" f armed=
++	[ -n "$KOPT_panda_slot" ] || return 0
++	grep -qx "trial=$KOPT_panda_slot" "$m"/slots/state 2>/dev/null || return 0
++	for f in "$m"/*.armed "$m"/boot/extlinux/*.armed "$m"/extlinux/*.armed; do
++		[ -f "$f" ] && armed="$armed $f"
++	done
++	[ -n "$armed" ] || return 0
++	ebegin "Trial boot of slot $KOPT_panda_slot: arming the rollback"
++	$MOCK mount -o remount,rw "$m" || { echo "can't write the boot medium" > "$ROOT"/dev/kmsg; return 0; }
++	for f in $armed; do
++		$MOCK mv -f "$f" "${f%.armed}"
++	done
++	sync
++	$MOCK mount -o remount,ro "$m"
++	eend 0
++}
++
++mount_panda_root() {
++	local m img
++	m=$(panda_media) && panda_arm_rollback "$m"
++	img="$m$KOPT_panda_root"
++	ebegin "Mounting root image $KOPT_panda_root"
++	if [ -z "$m" ] || ! [ -f "$img" ]; then
++		eend 1 "not found on the boot medium"
++	fi
++	$MOCK modprobe -a loop squashfs overlay 2> /dev/null
++	mkdir -p "$ROOT"/media/root-ro "$ROOT"/media/root-rw
++	$MOCK mount -t squashfs -o ro,loop "$img" "$ROOT"/media/root-ro \
++		|| eend 1 "can't mount the image"
++	$MOCK mount -t tmpfs -o "$rootflags" root-tmpfs "$ROOT"/media/root-rw \
++		|| eend 1 "can't mount the tmpfs"
++	mkdir -p "$ROOT"/media/root-rw/root "$ROOT"/media/root-rw/work
++	$MOCK mount -t overlay -o \
++		lowerdir="$ROOT"/media/root-ro,upperdir="$ROOT"/media/root-rw/root,workdir="$ROOT"/media/root-rw/work \
++		overlayfs "$sysroot"
++	eend $? "can't mount the overlay"
++}
++
+ prepare_apkovl() {
+ 	local IFS=':'
+ 	# shellcheck disable=SC2086
+@@ -588,6 +645,8 @@
+ 	nbd
+ 	overlaytmpfs
+ 	overlaytmpfsflags
++	panda_root
++	panda_slot
+ 	panic
+ 	pkgs
+ 	quiet
+@@ -929,7 +988,11 @@
+ fi
+ 
+ 
+-$MOCK mount -t tmpfs -o "$rootflags" tmpfs "$sysroot"
++if [ -n "$KOPT_panda_root" ]; then
++	mount_panda_root
++else
++	$MOCK mount -t tmpfs -o "$rootflags" tmpfs "$sysroot"
++fi
+ if [ "$KOPT_bootstrap_usr_merged" = "yes" ]; then
+ 	$MOCK mkdir -p "$sysroot"/usr/lib "$sysroot"/usr/bin "$sysroot"/usr/sbin
+ 	$MOCK ln -s usr/bin usr/sbin usr/lib "$sysroot"/
+@@ -960,7 +1023,8 @@
+ if [ -f "$ovl" ]; then
+ 	ebegin "Loading user settings from $ovl"
+ 	# create apk db and needed /dev/null and /tmp first
+-	$MOCK apk add --root "$sysroot" --initdb --quiet
++	# (panda_root: the image has the apk database)
++	[ -n "$KOPT_panda_root" ] || $MOCK apk add --root "$sysroot" --initdb --quiet
+ 
+ 	unpack_apkovl "$ovl" "$sysroot"
+ 	eend $? "$errstr" || ovlfiles=
+@@ -1042,7 +1106,12 @@
+ 	# let user override tmpfs size in fstab in apkovl
+ 	mountopts=$(awk '$2 == "/" && $3 == "tmpfs" { print $4 }' "$sysroot"/etc/fstab)
+ 	if [ -n "$mountopts" ]; then
+-		$MOCK mount -o remount,"$mountopts" "$sysroot"
++		# (panda_root: the tmpfs is the overlay's writable layer)
++		if [ -n "$KOPT_panda_root" ]; then
++			$MOCK mount -o remount,"$mountopts" "$ROOT"/media/root-rw
++		else
++			$MOCK mount -o remount,"$mountopts" "$sysroot"
++		fi
+ 	fi
+ 	# relocate mounts and adjust mount options
+ 	# this is so a generated /etc/apk/repositories will use correct
+@@ -1076,7 +1145,7 @@
+ done < "$repofile"
+ 
+ # install new root
+-ebegin "Installing packages to root filesystem"
++[ -n "$KOPT_panda_root" ] || ebegin "Installing packages to root filesystem"
+ 
+ if [ "$KOPT_chart" = yes ]; then
+ 	pkgs="$pkgs acct"
+@@ -1116,6 +1185,8 @@
+ 	apkflags="$apkflags --clean-protected"
+ 	[ -n "$ovlfiles" ] && apkflags="$apkflags --overlay-from-stdin"
+ fi
++# (panda_root: no packages to install)
++if [ -z "$KOPT_panda_root" ]; then
+ mkdir -p "$sysroot"/sys "$sysroot"/proc "$sysroot"/dev
+ $MOCK mount -o bind /sys "$sysroot"/sys
+ $MOCK mount -o bind /proc "$sysroot"/proc
+@@ -1133,6 +1204,7 @@
+ fi
+ $MOCK umount "$sysroot"/sys "$sysroot"/proc "$sysroot"/dev
+ eend 0
++fi
+ 
+ # unmount ovl mount if needed
+ if [ -n "$ovl_unmount" ]; then

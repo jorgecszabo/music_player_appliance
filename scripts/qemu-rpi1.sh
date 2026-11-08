@@ -4,8 +4,8 @@
 # 512 MB). There's no GPU firmware in QEMU, so this script plays its part, as
 # config.txt + slot.txt tell the firmware: the kernel, initramfs, cmdline.txt
 # and DTB of the slot in slot.txt, with config.txt's overlays applied
-# (fdtoverlay). From there it's the card's own boot: initramfs, modloop,
-# apkovl, packages, OpenRC. What it can't tell: os_prefix itself (the real
+# (fdtoverlay). From there it's the card's own boot: initramfs, root image,
+# apkovl, modloop, OpenRC. What it can't tell: os_prefix itself (the real
 # firmware), the overclock, the jack, the TFT/touch/buttons (no SPI devices),
 # the Model B's USB Ethernet, the watchdog reset, real timing.
 # Networking: a QEMU usb-net device (shows up as usb0, not eth0).

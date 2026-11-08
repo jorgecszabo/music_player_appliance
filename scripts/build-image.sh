@@ -1,5 +1,7 @@
 #!/bin/bash
-# Build the diskless Alpine image for the board with aports' mkimage.sh.
+# Build the card image for the board: aports' mkimage.sh makes the kernel, initramfs,
+# modloop, overlay and package repository; scripts/build-rootfs.sh turns the
+# repository into the slot's root image (slots/a/rootfs.squashfs, SQUASHFS-ROOT.md).
 # Usage: [BOARD=<board>] scripts/build-image.sh
 # Uses: boards/<board>/mkimg.<board>.sh (mkimage profile "<board>") and
 #       boards/<board>/board.conf, plus appliance/{appliance.conf,packages.list,
@@ -103,6 +105,10 @@ fi
 #   this version's copy also goes into the slot (and into OTA bundles)
 mkdir -p "$SD/factory"; cp "$SD/$HOST.apkovl.tar.gz" "$SD/factory/$HOST.apkovl.tar.gz"
 cp "$SD/$HOST.apkovl.tar.gz" "$SLOT/factory.apkovl.tar.gz"
+# - the root image, from the repository mkimage made (which then goes), and the
+#   initramfs init that mounts it (SQUASHFS-ROOT.md)
+"$PROJECT_DIR/scripts/build-rootfs.sh"
+rm -rf "$SLOT/apks"
 # - the chimes, synthesized here (slow on the board); .source = md5 of the generator
 CH="$APPLIANCE_DIR/rootfs/etc/panda/chimes.py"
 python3 -I "$CH" "$SLOT/chimes" && md5sum "$CH" | cut -d" " -f1 > "$SLOT/chimes/.source"

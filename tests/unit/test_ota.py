@@ -79,8 +79,8 @@ def env(tmp_path, keys):
 def make_bundle(keys, files=None, manifest=None, signer="good", extra_members=(), skip=(), links=()):
     files = files if files is not None else {
         "extlinux.label": LABEL.encode(), "boot/vmlinuz": b"kernel" * 100, "boot/initramfs": b"initrd" * 50,
-        "apks/pkg.apk": b"apk" * 200}
-    man = {"format": 1, "board": "testboard", "arch": "armv7", "version": "1.0", "git": "abc", "built": "now",
+        "rootfs.squashfs": b"hsqs" * 200}
+    man = {"format": 2, "board": "testboard", "arch": "armv7", "version": "1.0", "git": "abc", "built": "now",
            "kernel": "6.x",
            "files": [{"path": p, "size": len(d), "sha256": hashlib.sha256(d).hexdigest()} for p, d in files.items()]}
     man.update(manifest or {})
@@ -122,6 +122,7 @@ def test_good_bundle_installs_into_the_other_slot(env, keys):
     assert (env.media / "slots/b/slot.json").exists() and (env.media / "slots/b/boot/vmlinuz").read_bytes() == b"kernel" * 100
     conf = (env.media / "extlinux/extlinux.conf").read_text()
     assert "DEFAULT a" in conf and "LABEL b" in conf and "panda_slot=b" in conf       # the running slot stays the default
+    assert "panda_root=/slots/b/rootfs.squashfs" in conf and "alpine_repo=" not in conf
 
 
 def test_bad_signature_writes_nothing(env, keys):
@@ -158,7 +159,7 @@ def test_truncated_at_every_block_boundary(env, keys):
 
 
 @pytest.mark.parametrize("bad", [
-    {"manifest": {"board": "otherboard"}}, {"manifest": {"arch": "x86_64"}}, {"manifest": {"format": 2}},
+    {"manifest": {"board": "otherboard"}}, {"manifest": {"arch": "x86_64"}}, {"manifest": {"format": 1}},
     {"manifest": {"format": None}},
 ])
 def test_wrong_board_arch_or_format(env, keys, bad):
@@ -167,16 +168,16 @@ def test_wrong_board_arch_or_format(env, keys, bad):
 
 
 @pytest.mark.parametrize("path", ["../escape", "boot/../../escape", "/etc/passwd", "boot/../x", "evil", "boot/a b",
-                                  "boot/x;rm", "apks/\x00x", "etc/shadow", "boot/\n"])
+                                  "boot/x;rm", "apks/p.apk", "rootfs.squashfs/x", "etc/shadow", "boot/\n"])
 def test_paths_outside_the_allowed_set_are_refused(env, keys, path):
-    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"k", "apks/p.apk": b"a", path: b"x"}
+    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"k", "rootfs.squashfs": b"a", path: b"x"}
     r = env.run("install", stdin=make_bundle(keys, files=files))
     assert r.returncode != 0
     assert env.written() == [] and not (env.media.parent / "escape").exists()
 
 
 def test_checksum_mismatch_cleans_up(env, keys):
-    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"KERNELDATA", "apks/p.apk": b"apk"}
+    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"KERNELDATA", "rootfs.squashfs": b"apk"}
     bundle = make_bundle(keys, files=files)
     bundle = bundle.replace(b"KERNELDATA", b"KERNELDATB", 1)            # payload no longer matches its sha256
     r = env.run("install", stdin=bundle)
@@ -195,15 +196,15 @@ def test_duplicate_member_is_refused(env, keys):
 
 
 def test_symlink_member_is_refused(env, keys):
-    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"k", "apks/p.apk": b"a"}
+    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"k", "rootfs.squashfs": b"a"}
     r = env.run("install", stdin=make_bundle(keys, files=files, skip={"boot/vmlinuz"},
                                              links=[("boot/vmlinuz", "/etc/passwd")]))
     assert r.returncode != 0 and not (env.media / "slots/b/slot.json").exists()
 
 
-@pytest.mark.parametrize("missing", ["extlinux.label", "boot/vmlinuz", "apks/pkg.apk"])
+@pytest.mark.parametrize("missing", ["extlinux.label", "boot/vmlinuz", "rootfs.squashfs"])
 def test_incomplete_manifests_are_refused(env, keys, missing):
-    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"kernel", "apks/pkg.apk": b"apk"}
+    files = {"extlinux.label": LABEL.encode(), "boot/vmlinuz": b"kernel", "rootfs.squashfs": b"hsqs"}
     del files[missing]
     r = env.run("install", stdin=make_bundle(keys, files=files))
     assert r.returncode != 0 and not (env.media / "slots/b/slot.json").exists()
@@ -239,6 +240,46 @@ def test_activate_puts_the_new_slot_on_trial(env, keys):
     assert r.returncode == 0 and result(r)["slot"] == "b"
     assert "trial=b" in env.state() and "confirmed=a" in env.state()
     assert "DEFAULT b" in (env.media / "extlinux/extlinux.conf").read_text()
+
+
+def armed(env):
+    return sorted(str(p.relative_to(env.media)) for p in env.media.rglob("*.armed"))
+
+
+def test_activate_leaves_the_rollback_config_for_the_initramfs(env, keys):
+    installed(env, keys)
+    env.run("activate")
+    assert armed(env) == ["boot/extlinux/extlinux.conf.armed", "extlinux/extlinux.conf.armed"]
+    for f in armed(env):
+        text = (env.media / f).read_text()
+        assert "DEFAULT a" in text and "LABEL b" in text                  # the trial falls back to a
+        assert text.replace("DEFAULT a", "DEFAULT b") == (env.media / f[:-len(".armed")]).read_text()
+
+
+def test_the_trial_boot_and_confirm_remove_the_armed_configs(env, keys):
+    installed(env, keys)
+    env.run("activate")
+    env.booted("b")
+    assert env.run("boot").returncode == 0                              # armed (by Python too)
+    assert armed(env) == []
+    assert "DEFAULT a" in (env.media / "extlinux/extlinux.conf").read_text()
+
+
+def test_clearing_a_trial_removes_the_armed_configs(env, keys):
+    installed(env, keys)
+    env.run("activate")
+    env.run("activate", "a")                                            # changed my mind: stay on a
+    assert armed(env) == [] and "trial" not in env.state()
+
+
+def test_rpi_scheme_arms_slot_txt(env, keys):
+    env.board_conf.write_text(env.board_conf.read_text() + "OTA_BOOT_SCHEME=rpi\n")
+    installed(env, keys)
+    env.run("activate")
+    assert armed(env) == ["slot.txt.armed"]
+    assert "os_prefix=slots/b/" in (env.media / "slot.txt").read_text()
+    assert "os_prefix=slots/a/" in (env.media / "slot.txt.armed").read_text()
+    assert "panda_root=/slots/b/rootfs.squashfs" in (env.media / "slots/b/cmdline.txt").read_text()
 
 
 def test_activate_without_an_installed_other_slot_is_refused(env):

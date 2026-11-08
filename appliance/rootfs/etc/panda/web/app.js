@@ -650,6 +650,19 @@ function wireSlider(slider) {
     if (timer) { clearTimeout(timer); send(); }
     setTimeout(() => dragging.delete(slider.id), 2500);
   });
+  // Win9x style: wheel over the slider changes it (up = louder), 5% per notch.
+  // Touchpads send many small deltas, so accumulate them to one notch per 100.
+  let acc = 0;
+  slider.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    acc += e.deltaMode === 0 ? e.deltaY : e.deltaY * 100;
+    const notches = Math.trunc(acc / 100);
+    if (!notches) return;
+    acc -= notches * 100;
+    slider.value = Math.min(100, Math.max(0, +slider.value - notches * 5));
+    slider.dispatchEvent(new Event("input"));
+    slider.dispatchEvent(new Event("change"));
+  }, { passive: false });
 }
 
 function renderBluetooth(s) {

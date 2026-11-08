@@ -283,7 +283,7 @@ image with PipeWire 1.6.11 = the owner's version), the board's output recorded d
   identical to the configs that were live on the board (only comments moved), and after the
   deploy the board's files are byte-identical to the host render.
 - Board quirks moved into board.conf: `AUDIO_QUANTUM/_MIN/_MAX`, `AUDIO_OUTPUT_PROPS` (the
-  TWL6040 never-idle + IRQ-scheduling block), `BT_CONTROLLER_MODE`, `BT_RX_BUFFER`,
+  TWL6040 never-idle + IRQ-scheduling block), `BT_CONTROLLER_MODE`, `BT_CODECS`, `BT_RX_BUFFER`,
   `WATCHDOG_TIMEOUT`, web branding `BOARD_BLURB`/`BOARD_BADGE`. Generic defaults otherwise.
 - `boards/_template/` (documented board.conf, mkimage profile, card writer stub, aports note)
   and a "Porting the appliance to another board" section in README.md with a test checklist.

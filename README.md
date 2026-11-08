@@ -70,8 +70,23 @@ describes its hardware.
 
 ## Build an image (Fedora host, rootless podman)
 
-`BOARD=<name>` selects the board (default `pandaboard`). Every script reads it,
-so set it once for the whole build:
+`BOARD=<name>` selects the board (default `pandaboard`). Every script reads it.
+
+The `Makefile` runs the whole pipeline for one board (container, kernel, U-Boot,
+packages, image, OTA bundle) and skips steps whose inputs haven't changed:
+
+```sh
+scripts/setup-keys.sh                            # once: abuild signing key (back up keys/*.rsa)
+scripts/build-soloist-runtime.sh                 # once per arch: Spotify runtime (not armhf)
+make image BOARD=rpi1                            # SD image -> build/sdimage/rpi1/
+make ota BOARD=rpi1                              # image + signed bundle (default target: make)
+make help                                        # all targets
+make rebuild-packages BOARD=rpi1                 # force a step and everything after it
+```
+
+Then write the card with `write-sdcard.sh` as shown below. Packages and kernels
+are built in containers, so an apk deleted by hand isn't noticed: use
+`make rebuild-<step>`. The same steps by hand, which is also what the Makefile runs:
 
 ```sh
 export BOARD=beaglexm                            # or pandaboard
@@ -142,8 +157,8 @@ image (an `apks/` repository in the slot) can't update to it: write them again.
 scripts/build-ota.sh            # rebuilds the image, -> build/ota/panda-$BOARD-<version>.pota
 ```
 
-It needs the build container (`scripts/build-container.sh`) and the packages from
-"Build an image" above.
+`make ota` does the same and reuses an up-to-date image. It needs the build
+container and the packages from "Build an image" above.
 
 Install it on the web page (System Update: Browse..., Install, restart), or over SSH:
 

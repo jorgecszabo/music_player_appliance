@@ -119,6 +119,8 @@ radio-browser, stream server) are in `tests/fakes/`. When a graph test fails, it
 - Don't load modules or install dkms/kernel drivers on the Fedora host. Test on the board or in
   containers.
 - Commit directly to `main`.
+- Keep README.md up to date: when a change affects what it documents (build steps, commands, boards,
+  features, behaviour, configuration), update it in the same commit.
 - Never commit markdown plans or notes (yours or the user's). Only documentation goes into git:
   README.md files and this CLAUDE.md. `.gitignore` ignores every other `*.md`, so write new plans
   and notes as local files and never force-add them. Don't link to them from README.md or from code.

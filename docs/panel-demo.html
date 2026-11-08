@@ -151,6 +151,29 @@ main { display: grid; gap: 12px; min-width: 0; }
   font-style: normal;
 }
 .title-buttons i:last-child { margin-left: 2px; }
+/* Minimize glyph drawn, not typed: the "_" character sits wherever the font's baseline puts it. */
+.title-buttons i.min, .title-buttons i.max, .title-buttons i.x { position: relative; }
+.title-buttons i.min::after {
+  content: "";
+  position: absolute; left: 4px; bottom: 3px;
+  width: 6px; height: 2px;
+  background: #000;
+}
+/* Maximize box and close X drawn the same way: 2px strokes (box: 9x9, thick top). */
+.title-buttons i.max::after {
+  content: "";
+  position: absolute; left: 3px; top: 2px;
+  width: 7px; height: 5px;
+  border: 1px solid #000; border-top-width: 2px;
+}
+.title-buttons i.x::after {
+  content: "";
+  position: absolute; left: 3px; top: 2px;
+  width: 9px; height: 8px;
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1px), #000 calc(50% - 1px), #000 calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), #000 calc(50% - 1px), #000 calc(50% + 1px), transparent calc(50% + 1px));
+}
 .window-body { padding: 10px; }
 
 .sidebar .nav { list-style: none; margin: 0; padding: 0; }
@@ -756,7 +779,7 @@ details.advanced summary { cursor: pointer; }
 <div class="layout">
 
 <nav class="window sidebar" aria-label="Navigation">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9776;</span><span class="title-text">Navigation</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9776;</span><span class="title-text">Navigation</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <ul class="nav">
       <li><a href="#now-playing">Now Playing</a></li>
@@ -786,7 +809,7 @@ details.advanced summary { cursor: pointer; }
 <main>
 
 <section class="window" id="now-playing">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9835;</span><span class="title-text">Now Playing - Panda Amp</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9835;</span><span class="title-text">Now Playing - Panda Amp</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <div class="lcd">
       <div class="lcd-row">
@@ -810,7 +833,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="radio">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128251;</span><span class="title-text">Radio Tuner - powered by radio-browser.info</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128251;</span><span class="title-text">Radio Tuner - powered by radio-browser.info</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <div class="tuner sunken">
       <span class="tuner-led" id="radio-led" aria-hidden="true"></span>
@@ -851,7 +874,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="volume">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128264;</span><span class="title-text">Volume Control</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128264;</span><span class="title-text">Volume Control</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <div class="mixer" id="mixer">
       <div class="channel" id="master-channel">
@@ -899,7 +922,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="bluetooth">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9993;</span><span class="title-text">Bluetooth</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9993;</span><span class="title-text">Bluetooth</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <div class="pair-row">
       <button class="btn btn-big" id="pair-btn" type="button">Start pairing</button>
@@ -920,7 +943,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="network">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128225;</span><span class="title-text">Network Connections</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128225;</span><span class="title-text">Network Connections</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <fieldset class="group">
       <legend>Local Area Connection</legend>
@@ -965,7 +988,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="system">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128187;</span><span class="title-text">System Properties</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128187;</span><span class="title-text">System Properties</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <table class="props">
       <tr><th>Board</th><td id="sys-board">-</td></tr>
@@ -983,7 +1006,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="services">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9881;</span><span class="title-text">Services</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#9881;</span><span class="title-text">Services</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <table class="grid" id="svc-table">
       <thead><tr><th>Service</th><th>Status</th><th></th></tr></thead>
@@ -996,7 +1019,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="logs">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128220;</span><span class="title-text">Log Viewer</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128220;</span><span class="title-text">Log Viewer</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <div class="button-row left">
       <label for="log-name">Log:</label>
@@ -1012,7 +1035,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="settings">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128295;</span><span class="title-text">Settings</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128295;</span><span class="title-text">Settings</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <fieldset class="group">
       <legend>Speaker name</legend>
@@ -1049,7 +1072,7 @@ details.advanced summary { cursor: pointer; }
 </section>
 
 <section class="window" id="update">
-  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128190;</span><span class="title-text">System Update</span><span class="title-buttons" aria-hidden="true"><i>_</i><i>&#9633;</i><i>&times;</i></span></div>
+  <div class="title-bar"><span class="title-icon" aria-hidden="true">&#128190;</span><span class="title-text">System Update</span><span class="title-buttons" aria-hidden="true"><i class="min"></i><i class="max"></i><i class="x"></i></span></div>
   <div class="window-body">
     <p class="notice" id="ota-notice" hidden></p>
     <fieldset class="group">
@@ -1103,7 +1126,7 @@ details.advanced summary { cursor: pointer; }
 
 <div class="modal-backdrop" id="modal" hidden>
   <div class="window dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="title-bar"><span class="title-text" id="modal-title">Panda</span><span class="title-buttons" aria-hidden="true"><i>&times;</i></span></div>
+    <div class="title-bar"><span class="title-text" id="modal-title">Panda</span><span class="title-buttons" aria-hidden="true"><i class="x"></i></span></div>
     <div class="window-body">
       <div class="dialog-body"><span class="dialog-icon" id="modal-icon" aria-hidden="true">!</span><p id="modal-text"></p></div>
       <div class="button-row">
@@ -1115,7 +1138,7 @@ details.advanced summary { cursor: pointer; }
 </div>
 <div class="modal-backdrop" id="wifi-modal" hidden>
   <div class="window dialog" role="dialog" aria-modal="true" aria-labelledby="wifi-modal-title">
-    <div class="title-bar"><span class="title-text" id="wifi-modal-title">Connect to Wireless Network</span><span class="title-buttons" aria-hidden="true"><i>&times;</i></span></div>
+    <div class="title-bar"><span class="title-text" id="wifi-modal-title">Connect to Wireless Network</span><span class="title-buttons" aria-hidden="true"><i class="x"></i></span></div>
     <form class="window-body" id="wifi-form" autocomplete="off">
       <div class="dialog-body"><span class="dialog-icon info" aria-hidden="true">&#128225;</span>
         <div>
@@ -1788,6 +1811,20 @@ function wireSlider(slider) {
     if (timer) { clearTimeout(timer); send(); }
     setTimeout(() => dragging.delete(slider.id), 2500);
   });
+  // Win9x style: wheel over the slider changes it (up = louder), 2% per notch.
+  // Touchpads send many small deltas, so accumulate them to one notch per 100.
+  let acc = 0;
+  slider.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    // Firefox reports lines (3 per notch), not pixels (100 per notch).
+    acc += e.deltaMode === 0 ? e.deltaY : e.deltaY * 33;
+    const notches = Math.trunc(acc / 100);
+    if (!notches) return;
+    acc -= notches * 100;
+    slider.value = Math.min(100, Math.max(0, +slider.value - notches * 2));
+    slider.dispatchEvent(new Event("input"));
+    slider.dispatchEvent(new Event("change"));
+  }, { passive: false });
 }
 
 function renderBluetooth(s) {

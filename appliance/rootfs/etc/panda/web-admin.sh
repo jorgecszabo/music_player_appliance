@@ -5,6 +5,9 @@
 #
 #   web-admin.sh restart <service>   restart one appliance service
 #   web-admin.sh restart-audio       restart the whole audio stack in order
+#   web-admin.sh bt-reset            power-cycle a combo chip's Bluetooth half (reload its
+#                                    UART driver, board.conf BT_DRIVER_AFTER_WIFI); panda-bt
+#                                    calls it when the controller stops answering
 #   web-admin.sh reboot
 #   web-admin.sh poweroff            halt (the front panel's Shut Down)
 #   web-admin.sh save                lbu commit (save the config to the card)
@@ -61,6 +64,13 @@ restart)
 	esac ;;
 restart-audio)
 	bg "$0" restart-audio-now ;;
+bt-reset)
+	[ -n "${BT_DRIVER_AFTER_WIFI:-}" ] || die "this board's Bluetooth controller can't be reset by reloading a driver"
+	logger -t panda-bt "controller not answering: reloading $BT_DRIVER_AFTER_WIFI"
+	# Detached (bg): it stops panda-bt, our caller. The module's own enable line goes low and
+	# high again, and the firmware is downloaded again, hence the pause before bluetoothd.
+	bg sh -c "rc-service panda-bt stop; rc-service bluetooth stop; rmmod $BT_DRIVER_AFTER_WIFI;
+		sleep 2; modprobe $BT_DRIVER_AFTER_WIFI; sleep 12; rc-service bluetooth start; rc-service panda-bt start" ;;
 restart-audio-now)
 	restart_audio ;;
 reboot)

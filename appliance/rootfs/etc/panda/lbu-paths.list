@@ -9,5 +9,4 @@
 -etc/shairport-sync.conf
 -etc/bluetooth/main.conf
 -etc/conf.d/watchdog
--etc/modprobe.d/panda-radio.conf
 -etc/apk/repositories

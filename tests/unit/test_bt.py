@@ -175,3 +175,61 @@ def test_connected_chime_is_suppressed_right_after_pairing(bt, app, monkeypatch)
     app.event("connected")
     app.event("pairing-off")
     assert played == ["paired"]
+
+
+# --- the controller watchdog ------------------------------------------------------------------------
+
+def watch(bt, app, answers, ticks, monkeypatch, driver="hci_uart"):
+    """Run app.health() for `ticks` probes whose results are `answers`; return the bt-reset calls."""
+    app.cfg["BT_DRIVER_AFTER_WIFI"] = driver
+    resets = []
+    monkeypatch.setattr(bt.subprocess, "run", lambda cmd, **kw: resets.append(cmd))
+    it = iter(answers)
+    app.probe = lambda index: next(it)
+
+    class Done(Exception):
+        pass
+    n = {"sleeps": 0}
+
+    async def sleep(_):
+        n["sleeps"] += 1
+        if n["sleeps"] > ticks:
+            raise Done()
+    with pytest.raises(Done):
+        run(app.health(sleep=sleep))
+    return resets
+
+
+def test_a_controller_that_answers_is_left_alone(bt, app, monkeypatch):
+    assert watch(bt, app, [True] * 5, 5, monkeypatch) == []
+    assert app.alive is True
+
+
+def test_one_missed_probe_is_forgiven(bt, app, monkeypatch):
+    assert watch(bt, app, [True, False, True, True], 4, monkeypatch) == []
+    assert app.alive is True
+
+
+def test_a_silent_controller_is_power_cycled_after_two_probes(bt, app, monkeypatch):
+    assert watch(bt, app, [True, False, False], 3, monkeypatch) == [["/etc/panda/web-admin.sh", "bt-reset"]]
+    assert app.alive is False
+
+
+def test_probes_that_cannot_tell_are_ignored(bt, app, monkeypatch):
+    assert watch(bt, app, [None, None, None, None], 4, monkeypatch) == []
+    assert app.alive is None
+
+
+def test_without_a_driver_to_reload_it_only_reports(bt, app, monkeypatch):
+    assert watch(bt, app, [False, False, False, False], 4, monkeypatch, driver="") == []
+    assert app.alive is False
+
+
+def test_status_reports_whether_the_controller_answers(bt, app):
+    app.alive = False
+    app.devices = {}
+
+    async def fake_iface(*a):
+        raise bt.DBusError("org.bluez.Error.Failed", "no bus")
+    app.iface = fake_iface
+    assert run(app.status())["alive"] is False

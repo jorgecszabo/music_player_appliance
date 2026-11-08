@@ -4,8 +4,9 @@
 # On the PandaBoard's WL1271, powering the Wi-Fi half up or down (WLAN_EN) while
 # Bluetooth is running resets the chip under the BT firmware: Bluetooth stops
 # answering, and only cutting the power brings it back. So: the BT driver is
-# blacklisted from autoloading (/etc/modprobe.d/panda-radio.conf, from
-# setup.sh); this settles the Wi-Fi half first, and only then loads the BT
+# blacklisted from autoloading on the kernel command line (modprobe.blacklist=,
+# from the board's mkimg profile; a modprobe.d file would come too late, udev loads
+# the driver a few seconds into boot); this settles the Wi-Fi half first, and only then loads the BT
 # driver. If the board has an onboard Wi-Fi interface, it is brought up and
 # stays up for good (panda-wifi never takes it down). If the kernel has no
 # driver for it, the chip's SDIO card is still powered by the MMC core, which

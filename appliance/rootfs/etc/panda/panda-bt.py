@@ -21,11 +21,20 @@ Runs as root (service panda-bt): it saves pairings with lbu and drives LEDs.
   {"cmd": "forget", "path": "<device path>"}, {"cmd": "forget-all"},
   {"cmd": "media", "action": "play|pause|next|previous"} (AVRCP, the connected phone).
 - If bluetoothd goes away, exit; supervise-daemon restarts us.
+- Controller watchdog: every HEALTH_S seconds, send the controller a harmless HCI
+  command. A combo chip whose power is cut under its firmware (the WLAN_EN edge on the
+  PandaBoard's WL1271) stops answering while hci0 still looks UP, so BlueZ and everything
+  above it keep saying "fine". After HEALTH_FAILS silent probes in a row, power-cycle it
+  (web-admin.sh bt-reset reloads board.conf BT_DRIVER_AFTER_WIFI). Reported as "alive"
+  in the status.
 """
 import asyncio
 import grp
 import json
 import os
+import select
+import socket
+import struct
 import subprocess
 import sys
 import time
@@ -38,6 +47,9 @@ from dbus_next.service import ServiceInterface, method
 
 WINDOW_S = 120
 LONG_S = 5
+HEALTH_S = 30          # between probes of the controller
+HEALTH_FAILS = 2       # silent probes in a row before it is power-cycled
+PROBE_TIMEOUT_S = 5
 # Events with a chime (/etc/panda/chime.sh <event>).
 CHIMES = {"pairing-on", "pairing-off", "paired", "connected", "disconnected", "forgot-all"}
 AGENT_PATH = "/panda/agent"
@@ -50,8 +62,39 @@ def log(*a):
     print("panda-bt:", *a, flush=True)
 
 
+def hci_probe(index, timeout=PROBE_TIMEOUT_S):
+    """Does controller hci<index> answer HCI Read Local Version? True / False; None if we
+    can't tell (no Bluetooth sockets, no permission, no such device): not a failure."""
+    try:
+        s = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
+    except (OSError, AttributeError):
+        return None
+    try:
+        # Only command-complete / command-status events (hci_filter: type mask, event mask, opcode).
+        s.setsockopt(0, 2, struct.pack("<IIIH2x", 1 << 4, (1 << 0x0E) | (1 << 0x0F), 0, 0))   # SOL_HCI, HCI_FILTER
+        s.bind((index,))
+        s.send(b"\x01\x01\x10\x00")                  # command packet, opcode 0x1001, no parameters
+        end = time.monotonic() + timeout
+        while (left := end - time.monotonic()) > 0:
+            if not select.select([s], [], [], left)[0]:
+                break
+            ev = s.recv(260)
+            # 04 0e len ncmd opcode(2) status...   command complete
+            # 04 0f len status ncmd opcode(2)      command status (the controller refused)
+            if ev[:2] == b"\x04\x0e" and ev[4:6] == b"\x01\x10":
+                return True
+            if ev[:2] == b"\x04\x0f" and ev[5:7] == b"\x01\x10":
+                return True
+        return False
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
 def load_conf():
-    keys = ["SPEAKER_NAME", "BT_CONTROLLER", "BUTTON_INPUT_NAME", "BUTTON_KEY", "LED_BT"]
+    keys = ["SPEAKER_NAME", "BT_CONTROLLER", "BUTTON_INPUT_NAME", "BUTTON_KEY", "LED_BT",
+            "BT_DRIVER_AFTER_WIFI"]
     script = ". /etc/panda/board.conf; . /etc/panda/appliance.conf; " + "".join(
         f'printf "%s\\0" "${k}"; ' for k in keys)
     vals = subprocess.run(["sh", "-c", script], capture_output=True, check=True).stdout
@@ -135,6 +178,8 @@ class App:
         self.window_end = 0.0
         self.forgetting = False
         self.paired_at = -100.0
+        self.alive = None          # the controller answers HCI (None: not probed yet / can't tell)
+        self.probe = hci_probe     # (index) -> True / False / None; replaced in tests
 
     # --- state ------------------------------------------------------------------
     @property
@@ -310,6 +355,7 @@ class App:
             "window": self.window_open,
             "window_left": max(0, round(self.window_end - time.monotonic())) if self.window_open else 0,
             "forgetting": self.forgetting,
+            "alive": self.alive,
             "devices": [dict(path=p, address=d.get("Address", ""), name=d.get("Alias", ""),
                              paired=bool(d.get("Paired")), trusted=bool(d.get("Trusted")),
                              connected=bool(d.get("Connected")))
@@ -444,6 +490,36 @@ class App:
                 self.toggle_window()
 
     # --- main -----------------------------------------------------------------------
+    async def health(self, sleep=asyncio.sleep):
+        """Probe the controller; power-cycle it when it stops answering (see the docstring)."""
+        index = int("".join(c for c in self.hci if c.isdigit()) or 0)
+        loop = asyncio.get_running_loop()
+        fails = 0
+        while True:
+            await sleep(HEALTH_S)
+            ok = await loop.run_in_executor(None, self.probe, index)
+            if ok is None:
+                continue
+            self.alive = ok
+            if ok:
+                if fails:
+                    log("the controller answers again")
+                fails = 0
+                continue
+            fails += 1
+            log(f"the controller {self.hci} does not answer HCI ({fails}/{HEALTH_FAILS})")
+            if fails < HEALTH_FAILS:
+                continue
+            fails = 0
+            if not self.cfg.get("BT_DRIVER_AFTER_WIFI"):
+                log("no way to power-cycle this controller (board.conf BT_DRIVER_AFTER_WIFI)")
+                continue
+            log("power-cycling the controller")
+            self.led.set(False)
+            await loop.run_in_executor(None, lambda: subprocess.run(
+                ["/etc/panda/web-admin.sh", "bt-reset"], capture_output=True))
+            await sleep(60)          # the reset stops and restarts us
+
     async def run(self):
         self.save_lock = asyncio.Lock()
         self.bluez_gone = asyncio.get_running_loop().create_future()
@@ -495,7 +571,8 @@ class App:
         self.show_state()
 
         self.control_srv = await self.control_server()
-        tasks = [asyncio.ensure_future(self.button()), asyncio.ensure_future(self.reconnect())]
+        tasks = [asyncio.ensure_future(self.button()), asyncio.ensure_future(self.reconnect()),
+                 asyncio.ensure_future(self.health())]
         why = await self.bluez_gone
         log(f"{why}; exiting")
         for t in tasks:

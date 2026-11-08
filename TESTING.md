@@ -75,7 +75,7 @@ Seams added to the code for the suite (environment variables, nothing sets them 
 
 ## Known limitations found while writing the suite
 
-- On the test PandaBoard (192.168.0.55 Ethernet; the onboard Wi-Fi has no driver), `hci0` exists but the WL1271 does not answer HCI Reset (`Opcode 0x0c03 failed: -110`), so `panda-bt` crash-loops with `DBusError: Authentication Failed` at `set_powered(True)`. It predates the deploy and survives `panda-radio-init`/`bluetooth` restarts; `smoke.sh` reports it as a Bluetooth FAIL. The process checks over ssh need `doas` (the board mounts `/proc` with hidepid).
+- On the PandaBoard's WL1271, a rising edge on WLAN_EN while Bluetooth runs kills the Bluetooth half: hci0 still says UP, but HCI commands time out (-110). `panda-bt` now probes the controller and reloads its driver (`web-admin.sh bt-reset`); `smoke.sh` checks that the controller answers. The Bluetooth driver is held back on the kernel command line until `panda-radio-init` has pinned the SDIO card's power (see board.conf).
 - A pause request takes a few hundred milliseconds to execute (the AVRCP one about a second: a
   D-Bus round trip in a fresh process). If the source it targets is restarted within that time,
   the late pause can hit the new run. The arbiter checks before sending, not during.

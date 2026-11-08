@@ -141,6 +141,8 @@ else
 fi
 if status_py "s['bt'].get('adapter')"; then
     pass "the Bluetooth controller is up ($(status_val "len(s['bt']['devices'])") known devices)"
+    # BlueZ keeps calling a dead combo chip "UP", so ask the chip (panda-bt probes it every 30 s).
+    check "the Bluetooth controller answers HCI commands" wait_status "s['bt'].get('alive') is True" 70
 elif status_py "s['host'].get('bt_controller')"; then
     fail "Bluetooth: the board has a controller ($(status_val "s['host']['bt_controller']")) but panda-bt does not answer: $(status_val "s['bt'].get('error')")"
 else

@@ -43,6 +43,10 @@ profile_pandaboard() {
 	# No "quiet": the boot log on serial is the main debugging tool.
 	initfs_cmdline="modules=loop,squashfs,sd-mod,usb-storage"
 	kernel_cmdline="console=$CONSOLE"
+	# A combo chip's Bluetooth driver loads later, from panda-radio-init (board.conf
+	# BT_DRIVER_AFTER_WIFI). It has to be blacklisted from the start: udev loads it a
+	# few seconds into boot, and a file written by the setup script comes too late.
+	[ -z "${BT_DRIVER_AFTER_WIFI:-}" ] || kernel_cmdline="$kernel_cmdline modprobe.blacklist=$BT_DRIVER_AFTER_WIFI"
 	modloopfw="$MODLOOP_EXTRA_FIRMWARE"
 	pandaboard_extlinux=yes
 	# U-Boot + extlinux boot; no GRUB/EFI (profile_base enables it for ARM).

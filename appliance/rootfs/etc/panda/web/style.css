@@ -546,3 +546,6 @@ details.advanced summary { cursor: pointer; }
 }
 .slot-run { font-weight: bold; }
 @media (max-width: 480px) { .wizard-art { display: none; } }
+
+/* Message boxes keep the line breaks of their text. */
+#modal-text { white-space: pre-line; }

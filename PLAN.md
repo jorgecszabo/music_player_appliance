@@ -183,6 +183,13 @@ These make it behave like a commercial speaker. Built during Phases 4–6.
 **Speaker identity**
 - One friendly name, **"Panda"**, from one config file (`/etc/panda/speaker.conf`).
   Spotify Connect, the Bluetooth alias, AirPlay and the mDNS/hostname all read it.
+- Renaming on the web page also changes the hostname: the name in lowercase, every run of
+  characters but a-z 0-9 becomes `-` (`Jorge's Panda` -> `jorge-s-panda`, reachable at
+  `jorge-s-panda.local`). The page asks first (it shows the new name and address), then
+  `web-admin.sh set-name` updates `appliance.conf`, `/etc/hostname`, `/etc/hosts` and the running
+  hostname, saves (`lbu commit -d`: lbu refuses to save over an overlay under the old hostname without it) and reboots; the configs that
+  carry the name are regenerated at boot. The overlay's file name is not relied on anywhere (lbu names it after
+  the hostname): OTA and factory reset find it by what it is (`*.apkovl.tar.gz`, the newest).
 
 **Source handling**
 - **Last source wins:** a new stream (Spotify, AirPlay, BT) pauses the active

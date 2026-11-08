@@ -212,12 +212,13 @@ def other(slot):
 
 
 def overlay_path():
+    """The saved settings. lbu names them after the hostname, which the owner can change, so
+    the name isn't assumed: the newest *.apkovl.tar.gz on the card (renaming removes the old one)."""
+    found = sorted(glob.glob(MEDIA + "/*.apkovl.tar.gz"), key=os.path.getmtime, reverse=True)
+    if found:
+        return found[0]
     host = "panda" if TEST or not os.path.exists("/etc/hostname") else open("/etc/hostname").read().strip()
-    p = f"{MEDIA}/{host}.apkovl.tar.gz"
-    if os.path.exists(p):
-        return p
-    found = sorted(glob.glob(MEDIA + "/*.apkovl.tar.gz"))
-    return found[0] if found else p
+    return f"{MEDIA}/{host}.apkovl.tar.gz"
 
 
 # --- Bootloader schemes ---------------------------------------------------------------

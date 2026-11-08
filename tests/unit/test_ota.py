@@ -242,6 +242,19 @@ def test_activate_puts_the_new_slot_on_trial(env, keys):
     assert "DEFAULT b" in (env.media / "extlinux/extlinux.conf").read_text()
 
 
+def test_activate_snapshots_the_settings_of_a_renamed_speaker(env, keys):
+    """lbu names the overlay after the hostname, which the owner can change: it's found by what
+    it is, and the newest wins over a stale one under the old name."""
+    installed(env, keys)
+    old, new = env.media / "panda.apkovl.tar.gz", env.media / "kitchen.apkovl.tar.gz"
+    old.write_text("settings under the old name")
+    new.write_text("settings under the new name")
+    os.utime(old, (1, 1))
+    r = env.run("activate")
+    assert r.returncode == 0, r.stderr
+    assert (env.media / "slots/a/settings.apkovl.tar.gz").read_text() == "settings under the new name"
+
+
 def armed(env):
     return sorted(str(p.relative_to(env.media)) for p in env.media.rglob("*.armed"))
 

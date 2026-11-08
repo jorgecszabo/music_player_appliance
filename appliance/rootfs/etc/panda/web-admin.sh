@@ -14,7 +14,9 @@
 #   web-admin.sh lbu-status          unsaved changes (lbu status)
 #   web-admin.sh chrony              time sync status
 #   web-admin.sh logs <name>         last lines of a service log
-#   web-admin.sh set-name <name>     rename the speaker (all services), save
+#   web-admin.sh set-name <name>     rename the speaker and the host, save, reboot: the
+#                                    hostname is the name in lowercase, runs of anything but
+#                                    a-z 0-9 turned into "-" (Jorge's Panda -> jorge-s-panda)
 #   web-admin.sh set-soloist-key     new Spotify API key from stdin (never argv),
 #                                    save, restart Soloist, report if it runs
 #   web-admin.sh soloist-key-status  "set <mtime>" or "missing" (never the key)
@@ -106,15 +108,37 @@ set-name)
 	# Letters, digits, space and . _ - ' only; 1-32 chars. It ends up in shell,
 	# bluez and shairport config files, so nothing that needs quoting.
 	match "^[A-Za-z0-9][A-Za-z0-9 ._'-]{0,31}\$" "$name" || die "invalid name"
-	[ "$name" = "$SPEAKER_NAME" ] && { echo unchanged; exit 0; }
+	# The hostname: lowercase, anything but a-z 0-9 becomes "-" (runs collapse, ends trimmed).
+	# The name starts with a letter or digit and is at most 32 characters, so this is never
+	# empty or over 63; the check is for the day someone changes those limits.
+	host=$(printf '%s' "$name" | tr 'A-Z' 'a-z' | sed -e 's/[^a-z0-9][^a-z0-9]*/-/g' -e 's/^-//' -e 's/-$//')
+	match '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$' "$host" || die "the name makes no valid hostname"
+	oldhost=$(cat /etc/hostname 2>/dev/null || true)
+	[ "$name" = "$SPEAKER_NAME" ] && [ "$host" = "$oldhost" ] && { echo unchanged; exit 0; }
 	tmp=/etc/panda/appliance.conf.new
-	awk -v n="$name" '/^SPEAKER_NAME=/ { print "SPEAKER_NAME=\"" n "\""; next } { print }' \
+	awk -v n="$name" -v h="$host" '
+		/^SPEAKER_NAME=/ { print "SPEAKER_NAME=\"" n "\""; next }
+		/^HOSTNAME=/ { print "HOSTNAME=" h; seen = 1; next }
+		{ print }
+		END { if (!seen) print "HOSTNAME=" h }' \
 		/etc/panda/appliance.conf > "$tmp" && mv "$tmp" /etc/panda/appliance.conf
-	logger -t panda-web "speaker renamed to $name"
-	# setup.sh regenerates every config that carries the name and saves (lbu).
-	r=""; spotify && r="rc-service speaker-soloist restart && "
-	bg sh -c "sh /etc/panda/setup.sh && ${r}rc-service speaker-shairport restart \
-		&& rc-service bluetooth restart && rc-service panda-bt start"
+	if [ "$host" != "$oldhost" ]; then
+		printf '%s\n' "$host" > /etc/hostname.new && mv /etc/hostname.new /etc/hostname
+		# Before the save below: lbu names the overlay after the running hostname.
+		hostname "$host"
+		if [ -n "$oldhost" ] && [ -f /etc/hosts ]; then
+			awk -v o="$oldhost" -v h="$host" '{ for (i = 1; i <= NF; i++) if ($i == o) $i = h; print }' \
+				/etc/hosts > /etc/hosts.new && mv /etc/hosts.new /etc/hosts
+		fi
+	fi
+	logger -t panda-web "speaker renamed to $name (host $host); restarting"
+	# Save and restart; every config that carries the name is regenerated at boot (gen-configs.sh).
+	# lbu names the overlay after the hostname set above and refuses to save while one under the
+	# old name exists, unless told to replace it (-d). In the background: a commit to the card can
+	# outlast the web server's wait for this script. No reboot if the save fails (the changes stay,
+	# and the web page's Save button commits them).
+	bg sh -c "flock /run/panda/media.lock lbu commit -d && sleep 1 && reboot \
+		|| logger -t panda-web 'rename: saving failed, not restarting'"
 	echo renaming ;;
 set-soloist-key)
 	spotify || die "Spotify is off on this board"

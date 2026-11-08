@@ -23,6 +23,13 @@ function el(tag, props = {}, ...children) {
   return e;
 }
 
+// The hostname for a speaker name; the same rule as web-admin.sh set-name.
+const hostOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function showHost() {
+  const h = hostOf($("name-input").value.trim());
+  setText("name-host", h ? `http://${h}.local/` : "");
+}
+
 function setText(id, text) {
   const e = $(id);
   if (e && e.textContent !== text) e.textContent = text;
@@ -92,6 +99,7 @@ function render(s) {
   document.title = `${name} Control Panel`;
   if (document.activeElement !== $("name-input") && !$("name-input").dataset.edited) {
     $("name-input").value = name;
+    showHost();
   }
   setText("hits", String(s.hits).padStart(6, "0"));
   setText("updated", new Date(s.time * 1000).toLocaleString());
@@ -1038,15 +1046,20 @@ function wireActions() {
   $("log-refresh").addEventListener("click", loadLog);
   $("log-name").addEventListener("change", loadLog);
 
-  $("name-input").addEventListener("input", () => { $("name-input").dataset.edited = "1"; });
+  $("name-input").addEventListener("input", () => { $("name-input").dataset.edited = "1"; showHost(); });
   $("name-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const name = $("name-input").value.trim();
-    if (!await dialog(`Rename the speaker to "${name}"? ${sourcesText(last || { host: {} }, "and")} restart (about 30 s).`)) return;
+    const host = hostOf(name);
+    if (!host) return oops(new Error("The name needs a letter or a digit."));
+    if (!await dialog(`Rename the speaker to "${name}" and restart it?\n\n` +
+      `${sourcesText(last || { host: {} }, "and")} will show "${name}".\n` +
+      `Its network name becomes "${host}": http://${host}.local/\n\n` +
+      `The speaker restarts now (about a minute). Open the new address afterwards.`, { title: "Rename Panda" })) return;
     try {
       const r = await post("/api/name", { name });
       delete $("name-input").dataset.edited;
-      info(r.result === "unchanged" ? "That's already the name." : "Renaming... the new name shows up in about 30 seconds.");
+      info(r.result === "unchanged" ? "That's already the name." : `Restarting as "${host}"... in about a minute the speaker is at http://${host}.local/`);
     } catch (err) { oops(err); }
   });
 

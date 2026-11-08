@@ -12,7 +12,7 @@ import pytest
 from tests.conftest import PANDA
 
 STUBS = ["rc-service", "lbu", "logger", "reboot", "poweroff", "flock", "setsid", "pw-cli", "amixer", "chown",
-         "doas", "wpctl", "sync"]
+         "doas", "wpctl", "sync", "hostname"]
 
 
 @pytest.fixture
@@ -32,13 +32,16 @@ def admin(tmp_path):
             p.write_text('#!/bin/sh\necho "%s $*" >> "%s"\n' % (name, calls))
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
     (root / "etc/panda/board.conf").write_text('SPOTIFY=yes\nAUDIO_HW_VOLUME_MAX=15\nAUDIO_CARD=""\n')
-    (root / "etc/panda/appliance.conf").write_text('SPEAKER_NAME="Panda"\n')
+    (root / "etc/panda/appliance.conf").write_text('HOSTNAME=panda\nSPEAKER_NAME="Panda"\n')
+    (root / "etc/hostname").write_text("panda\n")
+    (root / "etc/hosts").write_text("127.0.0.1 localhost panda\n")
     (root / "etc/panda/audio.conf").write_text("BASS_DB=0\nTREBLE_DB=0\nMAX_VOLUME=10\nOUTPUT=onboard\nUSB_MAX_DB=0\n"
                                                "USB_PROFILE=auto\n")
     (root / "etc/panda/tone-conf.sh").write_text("#!/bin/sh\n: tone\n")
     text = open(os.path.join(PANDA, "web-admin.sh")).read()
     text = text.replace("PATH=/usr/sbin:/usr/bin:/sbin:/bin", f"PATH={stubs}:/usr/bin:/bin")
-    for old in ("/etc/panda", "/etc/pipewire", "/var/log", "/run/panda", "/run/speaker"):
+    for old in ("/etc/panda", "/etc/pipewire", "/etc/hostname", "/etc/hosts", "/var/log", "/run/panda",
+                "/run/speaker"):
         text = text.replace(old, str(root) + old)
     script = tmp_path / "web-admin.sh"
     script.write_text(text)
@@ -97,6 +100,47 @@ def test_set_name_valid(admin, name):
     r = admin.run("set-name", name)
     assert r.returncode == 0, r.stderr
     assert f'SPEAKER_NAME="{name}"' in admin.read("etc/panda/appliance.conf")
+
+
+@pytest.mark.parametrize("name,host", [
+    ("Kitchen", "kitchen"), ("Living Room", "living-room"), ("Jorge's Panda", "jorge-s-panda"),
+    ("a.b_c-d'e", "a-b-c-d-e"), ("Hall  --  2nd", "hall-2nd"), ("Trailing-", "trailing"), ("A" * 32, "a" * 32)])
+def test_set_name_sets_a_lowercase_valid_hostname(admin, name, host):
+    r = admin.run("set-name", name)
+    assert r.returncode == 0, r.stderr
+    assert admin.read("etc/hostname") == host + "\n"
+    assert f"HOSTNAME={host}\n" in admin.read("etc/panda/appliance.conf")
+    assert admin.read("etc/hosts") == f"127.0.0.1 localhost {host}\n"
+    assert f"hostname {host}" in admin.calls()
+    # saved after the hostname changed (lbu names the overlay after it), then the speaker restarts
+    # (in the background chain: the web server kills a script that runs too long, and a commit can)
+    assert admin.wait_call("lbu commit -d && "), admin.calls()
+    calls = admin.calls()
+    chain = next(c for c in calls if "lbu commit -d && " in c)         # -d: lbu refuses to save while an overlay under the old hostname exists
+    assert chain.index("lbu commit -d") < chain.index("reboot")
+    assert calls.index(f"hostname {host}") < calls.index(chain)
+
+
+def test_set_name_same_name_and_hostname_is_unchanged(admin):
+    r = admin.run("set-name", "Panda")
+    assert r.returncode == 0 and r.stdout.strip() == "unchanged"
+    assert not any(c.startswith("hostname ") or "reboot" in c for c in admin.calls())
+
+
+def test_set_name_with_a_new_case_only_changes_the_name(admin):
+    """Same hostname, different name: the name is saved, the host isn't touched."""
+    (admin.root / "etc/panda/appliance.conf").write_text('HOSTNAME=kitchen\nSPEAKER_NAME="Panda"\n')
+    (admin.root / "etc/hostname").write_text("kitchen\n")
+    assert admin.run("set-name", "KITCHEN").returncode == 0
+    assert 'SPEAKER_NAME="KITCHEN"' in admin.read("etc/panda/appliance.conf")
+    assert not any(c.startswith("hostname ") for c in admin.calls())
+    assert admin.wait_call("lbu commit -d && "), admin.calls()  # saved and restarted: the name goes into the configs at boot
+
+
+def test_set_name_adds_a_missing_hostname_line(admin):
+    (admin.root / "etc/panda/appliance.conf").write_text('SPEAKER_NAME="Panda"\n')
+    assert admin.run("set-name", "Kitchen").returncode == 0
+    assert "HOSTNAME=kitchen\n" in admin.read("etc/panda/appliance.conf")
 
 
 BAD_NAMES = ["", " lead", "A" * 33, "bad;name", "$(reboot)", "`reboot`", "a\"b", "a\\b", "-x", "a&b", "a|b",

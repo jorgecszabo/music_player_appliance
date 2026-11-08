@@ -42,9 +42,15 @@ async function post(url, body) {
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
+  if (data.stale) {            // what the page showed is gone: show the current state instead
+    fetch("/api/status").then((x) => x.json()).then(render).catch(() => {});
+    throw new StaleError(data.error);
+  }
   if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
 }
+
+class StaleError extends Error {}
 
 function fmtDuration(s) {
   s = Math.floor(s);
@@ -84,7 +90,7 @@ function dialog(text, { title = "Panda", icon = "!", kind = "", cancel = true } 
 }
 
 const info = (text) => dialog(text, { icon: "i", kind: "info", cancel: false });
-const oops = (err) => dialog(String(err.message || err), { title: "Error", icon: "X", kind: "err", cancel: false });
+const oops = (err) => err instanceof StaleError ? undefined : dialog(String(err.message || err), { title: "Error", icon: "X", kind: "err", cancel: false });
 
 // --- rendering --------------------------------------------------------------------
 function render(s) {

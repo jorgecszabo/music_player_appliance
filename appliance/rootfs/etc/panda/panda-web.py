@@ -83,6 +83,12 @@ LOGS = ["pipewire", "wireplumber", "soloist", "shairport", "arbiter", "radio", "
         "panda-web-admin", "messages"]
 
 
+class Stale(ValueError):
+    """The request names something that is gone (a PipeWire node that came and went, say).
+    The page's view is out of date, not the user's input: sent as 409 with "stale": true,
+    which the page answers by refreshing instead of showing an error."""
+
+
 def run(cmd, timeout=10, env=None, stdin=None):
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
@@ -946,6 +952,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"error": "not found"}, 404)
         try:
             self.send_json(handler(req))
+        except Stale as e:
+            self.send_json({"error": str(e), "stale": True}, 409)
         except ValueError as e:
             self.send_json({"error": str(e)}, 400)
         except OSError as e:
@@ -1072,7 +1080,7 @@ class Handler(BaseHTTPRequestHandler):
         if audio.get("sink"):
             ids.add(audio["sink"]["id"])
         if node not in ids:
-            raise ValueError("unknown node")
+            raise Stale("unknown node")
         if "mute" in req:
             run(["wpctl", "set-mute", str(node), "1" if req["mute"] else "0"], env=PW_ENV)
         if "volume" in req:
@@ -1164,14 +1172,14 @@ class Handler(BaseHTTPRequestHandler):
             if req.get("add"):
                 st = rb_get(f"/json/stations/byuuid/{uuid}")
                 if not st:
-                    raise ValueError("unknown station")
+                    raise ValueError("that station is no longer listed")
                 favs.append(station_summary(st[0]))
             save_favorites(favs)
             return {"ok": True, "stations": favs}
         if cmd == "play":
             st = rb_get(f"/json/stations/byuuid/{uuid}")
             if not st:
-                raise ValueError("unknown station")
+                raise ValueError("that station is no longer listed")
             # /json/url/<uuid> counts a click (as the API asks) and gives the URL.
             res = rb_get(f"/json/url/{uuid}")
             stream = (res or {}).get("url") or st[0].get("url_resolved") or st[0].get("url") or ""

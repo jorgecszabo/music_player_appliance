@@ -234,3 +234,11 @@ def test_socket_server_survives_non_object_requests(wifi, tmp_path, monkeypatch)
             reply = s.recv(4096)
         assert reply.endswith(b"\n") and "error" in json.loads(reply), (raw, reply)
     assert panda_ipc.line_call(sock, {"cmd": "status"}) == {"state": "fake"}
+
+
+def test_forgetting_a_network_that_is_already_gone_succeeds(wifi):
+    import threading
+    w = wifi.Wifi.__new__(wifi.Wifi)
+    w.conf = {"networks": [], "country": "", "adapter": "auto"}
+    w.lock = threading.RLock()
+    assert w.forget({"ssid": "Gone"}) == {"ok": True}

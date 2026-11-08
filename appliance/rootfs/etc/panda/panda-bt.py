@@ -315,7 +315,7 @@ class App:
     async def forget(self, path):
         d = self.devices.get(path)
         if d is None:
-            raise ValueError("unknown device")
+            return          # already gone (another page, or it dropped off): what was asked for
         log("forgetting", d.get("Alias", path))
         await self.adapter.call_remove_device(path)
         self.event("forgot", d.get("Alias", path))

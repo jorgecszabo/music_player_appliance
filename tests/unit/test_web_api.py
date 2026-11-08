@@ -174,7 +174,7 @@ def test_radio_bad_ids(srv, uuid):
 
 def test_radio_unknown_station(srv):
     code, body = post(srv, "/api/radio", {"cmd": "play", "uuid": UUID})
-    assert code == 400 and "unknown station" in body["error"]
+    assert code == 400 and "no longer listed" in body["error"]
 
 
 def test_radio_stop(srv):
@@ -222,7 +222,19 @@ def test_radio_play_when_the_player_is_down_says_so_in_plain_words(srv, web, mon
 ])
 def test_volume_bad_input_is_a_400_not_a_500(srv, body):
     code, resp = post(srv, "/api/volume", body)
-    assert code in (200, 400), (body, code, resp)
+    assert code in (200, 400, 409), (body, code, resp)
+
+
+@pytest.mark.parametrize("body", [{"id": 99}, {"id": -1}, {"id": 5000, "mute": True}])
+def test_volume_on_a_node_that_is_gone_is_stale(srv, body):
+    code, resp = post(srv, "/api/volume", body)
+    assert code == 409 and resp["stale"] is True
+    assert not [c for c in srv.calls if c[0] == "run"]
+
+
+def test_volume_unparseable_id_is_not_stale(srv):
+    code, resp = post(srv, "/api/volume", {"id": "abc"})
+    assert code == 400 and "stale" not in resp
 
 
 @pytest.mark.parametrize("v,expect", [(0.5, "0.500"), (2, "1.000"), (-3, "0.000"), ("0.25", "0.250")])

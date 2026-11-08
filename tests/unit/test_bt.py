@@ -77,17 +77,16 @@ async def talk(bt, app, tmp_path, monkeypatch, lines):
 
 def test_control_replies_to_garbage_and_keeps_serving(bt, app, tmp_path, monkeypatch):
     lines = [b"[1]\n", b"5\n", b"null\n", b'"x"\n', b"{\n", b"\xff\xfe\n", b"\n", b'{"cmd": ["x"]}\n',
-             b'{"cmd": "nope"}\n', b'{"cmd": "media", "action": "rm -rf"}\n', b'{"cmd": "forget", "path": "../x"}\n',
-             b'{"cmd": "forget", "path": ["a"]}\n', b'{"cmd": "media", "action": null}\n']
+             b'{"cmd": "nope"}\n', b'{"cmd": "media", "action": "rm -rf"}\n', b'{"cmd": "media", "action": null}\n']
     replies = run(talk(bt, app, tmp_path, monkeypatch, lines))
     for line, reply in zip(lines, replies):
         assert reply.endswith(b"\n") and "error" in json.loads(reply), (line, reply)
     assert json.loads(replies[-1]) == {"status": "fake"}
 
 
-def test_forget_unknown_device_is_an_error_not_a_crash(bt, app):
-    with pytest.raises(ValueError):
-        run(app.forget("/org/bluez/hci0/dev_00"))
+def test_forget_unknown_device_is_a_no_op(bt, app):
+    run(app.forget("/org/bluez/hci0/dev_00"))
+    assert not app.adapter.calls and app.saved == []
 
 
 def test_forget_known_device_removes_and_saves(bt, app):

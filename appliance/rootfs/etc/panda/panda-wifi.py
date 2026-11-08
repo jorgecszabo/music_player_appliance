@@ -779,7 +779,7 @@ class Wifi:
             before = len(self.conf["networks"])
             self.conf["networks"] = [e for e in self.conf["networks"] if e["ssid"] != ssid]
             if len(self.conf["networks"]) == before:
-                raise ValueError("not a saved network")
+                return {"ok": True}     # already forgotten: what was asked for
         log(f"forgetting {ssid!r}")
         self.write_wpa_conf()
         nid = self.net_id(ssid)

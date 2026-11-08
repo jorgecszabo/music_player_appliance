@@ -1,9 +1,10 @@
 # Audio appliance
 
-A network speaker for old ARM boards. It plays Spotify Connect, AirPlay,
-Bluetooth and internet radio through the board's headphone jack or a USB DAC, and
-you control it from a web page. The system is a read-only image on the SD card and
-everything it writes goes to RAM, so you can pull the plug at any time.
+A network speaker for old ARM boards: a small Linux distribution based on Alpine
+Linux. It plays Spotify Connect, AirPlay, Bluetooth and internet radio through the
+board's headphone jack or a USB DAC, and you control it from a web page. The
+system is a read-only image on the SD card and everything it writes goes to RAM,
+so you can pull the plug at any time.
 
 ## Features
 

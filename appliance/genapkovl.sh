@@ -64,8 +64,6 @@ makefile root:root 0644 "$tmp"/etc/apk/world <<EOT
 alpine-base
 panda-appliance
 panda-board-$BOARD
-!mesa
-!libcamera
 EOT
 
 # SSH: key-only, only the admin user. Root keeps its password for the serial

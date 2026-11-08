@@ -28,7 +28,7 @@ scripts/test-ota.sh               # OTA slots against build/sdimage/<board>
 
 scripts/build-image.sh            # SD image -> build/sdimage/$BOARD/ (needs container + packages; see README)
 scripts/build-ota.sh              # signed update bundle -> build/ota/panda-$BOARD-<version>.pota
-scripts/build-package.sh <aport>  # pipewire, mpv, shairport-sync, panda-spectrum, linux-$BOARD
+scripts/build-package.sh <aport>  # shairport-sync, panda-spectrum, linux-$BOARD
 scripts/build-demo.sh             # regenerate docs/panel-demo.html + .png after any web page change
 scripts/check-forks.sh            # forks/kernels behind upstream
 
@@ -64,9 +64,8 @@ from them).
 **Packaging and image.** `appliance/rootfs/` (services, daemons, web page) becomes the noarch
 `panda-appliance` apk (`aports/panda-appliance/APKBUILD`, built from the tree mounted at `/work`);
 its `depends` comes from `appliance/packages.list`, and it has one `panda-board-<board>` subpackage
-per board that carries board.conf. `aports/` also holds forks of pipewire/mpv (without the GPU
-stack) and shairport-sync (native PipeWire backend). The forks use `pkgrel=100` so they win over
-Alpine's builds. Packages are built in a target-arch Alpine container under qemu-user and land in
+per board that carries board.conf. `aports/` also holds a fork of shairport-sync (native PipeWire
+backend; `pkgrel=100` so it wins over Alpine's build). PipeWire and mpv are stock Alpine packages. Packages are built in a target-arch Alpine container under qemu-user and land in
 `packages/main/<arch>/`. Kernels are cross-compiled on the host by `scripts/cross-build-kernel.sh`,
 which also builds the out-of-tree `drivers/r92su` (a git submodule). U-Boot v2024.07 is built with
 Fedora's cross gcc.

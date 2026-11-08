@@ -7,10 +7,10 @@
 description="Internet radio player (mpv, user speaker)"
 supervisor=supervise-daemon
 command=/usr/bin/mpv
-# Locked down: no config; our headless mpv build (aports/mpv) has no scripting
-# at all (no Lua/JS/C plugins, so no scripts or youtube-dl, and mpv rejects
-# --load-scripts/--ytdl); only what the web page loads.
+# Locked down: no config; scripting is off via --config=no and
+# --load-scripts=no/--ytdl=no below; only what the web page loads.
 command_args="--idle=yes --no-video --no-terminal --config=no
+	--load-scripts=no --ytdl=no
 	--ao=pipewire --audio-client-name=radio --input-ipc-server=/run/speaker/radio.sock
 	--cache=yes --cache-secs=20 --network-timeout=15 --msg-level=all=warn
 	--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_delay_max=10"

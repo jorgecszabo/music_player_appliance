@@ -212,11 +212,9 @@ through OTA first (see "Updates"), then run step 2.
 
 ## Our forks of Alpine packages
 
-`aports/` holds forks of Alpine packages: shairport-sync (native PipeWire
-backend), and pipewire and mpv without the GPU stack (Alpine's builds pull in
-mesa and llvm, ~170 MB more in every root image). They win over Alpine's
-builds (pkgrel 100) and setup.sh keeps `!mesa` and `!libcamera` in the world,
-so upstream fixes only arrive when we rebuild. `scripts/check-forks.sh` lists
+`aports/` holds one fork of an Alpine package: shairport-sync (native PipeWire
+backend; Alpine's build has none). It wins over Alpine's build (pkgrel 100),
+so upstream fixes only arrive when we rebuild. PipeWire and mpv are Alpine's own packages. `scripts/check-forks.sh` lists
 the forks and board kernels that are behind Alpine or kernel.org (exit 1).
 To update a fork: take Alpine's new APKBUILD, reapply the changes listed in
 the fork's header, set `_upstream_base`, keep `pkgrel=100`, and rebuild with

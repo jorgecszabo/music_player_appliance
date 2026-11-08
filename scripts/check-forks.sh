@@ -1,7 +1,6 @@
 #!/bin/bash
 # Report which of our own packages are behind their upstream. We hold these
-# back on purpose (pkgrel 100 wins over Alpine's build of the same version, and
-# setup.sh keeps !mesa/!libcamera in the world), so upstream security fixes
+# back on purpose (pkgrel 100 wins over Alpine's build of the same version), so upstream security fixes
 # only reach the boards when we rebuild.
 #   - Alpine forks (aports/*, boards/*/aports/* with _upstream=<repo>/<name> and
 #     _upstream_base=<ver>-r<rel>): compared with Alpine's current package in

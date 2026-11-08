@@ -22,7 +22,7 @@ ALPINE_VERSION := $(shell sed -n 's/^ALPINE_VERSION=//p' scripts/env.sh)
 
 STAMPS := build/.stamps/$(BOARD)
 # Generic packages every board needs (the appliance itself is rebuilt by build-image.sh).
-PACKAGES := pipewire mpv shairport-sync panda-spectrum
+PACKAGES := shairport-sync panda-spectrum
 
 # Our own kernel is an aport; boards on Alpine's kernel (linux-rpi) have nothing to build.
 OWN_KERNEL := $(or $(wildcard boards/$(BOARD)/aports/$(KERNEL_PACKAGE)/APKBUILD),$(wildcard aports/$(KERNEL_PACKAGE)/APKBUILD))
@@ -76,7 +76,7 @@ $(STAMPS)/uboot:
 	@touch $@
 endif
 
-packages: $(STAMPS)/packages ## build pipewire, mpv, shairport-sync, panda-spectrum
+packages: $(STAMPS)/packages ## build shairport-sync, panda-spectrum
 $(STAMPS)/packages: $(STAMPS)/container $(foreach p,$(PACKAGES),$(call files,aports/$(p)))
 	@mkdir -p $(@D)
 	@for p in $(PACKAGES); do echo ">>> $$p"; scripts/build-package.sh $$p || exit 1; done

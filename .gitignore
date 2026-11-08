@@ -10,3 +10,8 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 tests/graph/artifacts/
+
+# Plans and notes stay local: only documentation (README.md) and CLAUDE.md are committed.
+*.md
+!README.md
+!CLAUDE.md

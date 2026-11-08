@@ -9,7 +9,9 @@ everything it writes goes to RAM, so you can pull the plug at any time.
 
 Sources:
 
-- Spotify Connect. It shows up in the Spotify app on the same network.
+- Spotify Connect, with Spotify's official client (Soloist). It shows up in the
+  Spotify app on the same network. The speaker downloads Soloist from Spotify and
+  keeps it up to date on its own.
 - AirPlay, from iPhones, Macs and Linux desktops (PipeWire's RAOP sink).
 - Bluetooth A2DP. Pair with the button or the web page; it reconnects to the last
   phone on its own.
@@ -33,8 +35,7 @@ System:
 - Wi-Fi (many USB dongles) or Ethernet, a firewall limited to the local network, a
   hardware watchdog and a factory-reset button.
 - Chimes for boot, pairing and connect/disconnect. No speech.
-- On boards with a small TFT, a front panel with a live spectrum (see
-  [RPI1.md](RPI1.md)).
+- On boards with a small TFT, a front panel with a live spectrum.
 
 ## Web control panel
 
@@ -64,8 +65,7 @@ MLO + `u-boot.img` and a serial console on `ttyS2` (OMAP), or
 `u-boot-sunxi-with-spl.bin` (raw at 8 KiB) and `ttyS0`, the debug header
 (pcDuino). The Pi needs no U-Boot: its GPU firmware boots Linux from the OTA
 slot that `slot.txt` names (`config.txt` includes it), console `ttyAMA0`. All consoles are 115200 8N1. Each board's `board.conf`
-describes its hardware. Bring-up notes: [PCDUINO.md](PCDUINO.md) for the pcDuino,
-[RPI1.md](RPI1.md) for the Pi and its front panel (`panda-lcd`).
+describes its hardware.
 
 ## Build an image (Fedora host, rootless podman)
 
@@ -134,7 +134,7 @@ The card holds two versions (slots A and B, `slots/<x>/` on the boot partition:
 kernel, initramfs, modules, the root image `rootfs.squashfs`). An update goes into
 the slot that isn't running; the other one stays untouched. The boot mounts the
 slot's root image read-only with a RAM overlay for writes and unpacks the saved
-settings on top ([SQUASHFS-ROOT.md](SQUASHFS-ROOT.md)). Cards written before the root
+settings on top. Cards written before the root
 image (an `apks/` repository in the slot) can't update to it: write them again.
 
 ```sh
@@ -170,8 +170,7 @@ or edit `extlinux/extlinux.conf` (`DEFAULT a` / `DEFAULT b`) on a PC.
 
 ## Testing
 
-Everything below runs without a board unless it says otherwise. [TESTING.md](TESTING.md) has the plan,
-what each test covers and the known limits.
+Everything below runs without a board unless it says otherwise.
 
 ```sh
 # Once: a virtualenv with the test tools (pytest, hypothesis, ruff, shellcheck, dbus-next, evdev)

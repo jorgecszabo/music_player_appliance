@@ -70,49 +70,26 @@ describes its hardware.
 
 ## Build an image (Fedora host, rootless podman)
 
-`BOARD=<name>` selects the board (default `pandaboard`). Every script reads it.
-
-The `Makefile` runs the whole pipeline for one board (container, kernel, U-Boot,
-packages, image, OTA bundle) and skips steps whose inputs haven't changed:
-
-```sh
-scripts/setup-keys.sh                            # once: abuild signing key (back up keys/*.rsa)
-scripts/build-soloist-runtime.sh                 # once per arch: Spotify runtime (not armhf)
-make image BOARD=rpi1                            # SD image -> build/sdimage/rpi1/
-make ota BOARD=rpi1                              # image + signed bundle (default target: make)
-make help                                        # all targets
-make rebuild-packages BOARD=rpi1                 # force a step and everything after it
-```
-
-Then write the card with `write-sdcard.sh` as shown below. Packages and kernels
-are built in containers, so an apk deleted by hand isn't noticed: use
-`make rebuild-<step>`. The same steps by hand, which is also what the Makefile runs:
+`BOARD=<name>` selects the board (default `pandaboard`; also `beaglexm`, `pcduino`,
+`rpi1`). The `Makefile` runs the whole pipeline for one board (build container, kernel,
+U-Boot, packages, image, OTA bundle) and skips steps whose inputs haven't changed:
 
 ```sh
-export BOARD=beaglexm                            # or pandaboard
-
-# Once per host (the container is per Alpine arch); redo build-container.sh after
-# clearing podman's storage (e.g. podman system reset); keys/ and packages/ survive
-scripts/build-container.sh                       # target-arch Alpine build container
-scripts/setup-keys.sh                            # abuild signing key (back up keys/*.rsa)
-
-# Once per Alpine arch (armv7 is shared by three boards; rpi1 is armhf), and again
-# when a fork changes
-scripts/build-package.sh pipewire                # our headless forks (see below)
-scripts/build-package.sh mpv
-scripts/build-package.sh shairport-sync
-scripts/build-soloist-runtime.sh                 # glibc runtime for Spotify Soloist (not armhf)
-scripts/build-package.sh panda-spectrum          # front panel spectrum (boards with LCD_FB)
-
-# Per board
-scripts/build-u-boot.sh                          # needs gcc-arm-linux-gnu (not rpi1)
-scripts/build-package.sh linux-$BOARD            # kernel, cross-compiled (~10 min; not
-                                                 #   rpi1: it uses Alpine's linux-rpi)
-scripts/build-image.sh                           # -> build/sdimage/$BOARD/
-sudo boards/$BOARD/write-sdcard.sh /dev/sdX build/sdimage/$BOARD   # erases the card
+scripts/setup-keys.sh                  # once: abuild signing key (back up keys/*.rsa)
+scripts/build-soloist-runtime.sh       # once per arch: glibc runtime for Spotify Soloist (not armhf)
+make image BOARD=rpi1                  # SD image -> build/sdimage/rpi1/
+make ota BOARD=rpi1                    # image + signed update bundle (also the default target)
+make help                              # all targets
+make rebuild-packages BOARD=rpi1       # force a step and everything after it
+sudo boards/rpi1/write-sdcard.sh /dev/sdX build/sdimage/rpi1   # erases the card
 # (pcduino also: boards/pcduino/write-sdcard.sh --image card.img build/sdimage/pcduino,
 #  no root, then one dd onto the card)
 ```
+
+Packages and kernels are built in containers, so an apk deleted by hand isn't
+noticed: use `make rebuild-<step>` (`container`, `kernel`, `uboot`, `packages`,
+`image`, `ota`). After clearing podman's storage (e.g. `podman system reset`) run
+`make rebuild-container`; `keys/` and `packages/` survive.
 
 Packages go to `packages/main/<arch>/`; `build-image.sh` takes our packages from
 there, and everything else from Alpine's mirrors. Without the Soloist runtime

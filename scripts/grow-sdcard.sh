@@ -40,7 +40,9 @@ nparts=$(lsblk -lno PATH "$DEV" | tail -n +2 | wc -l)
 PART=$(lsblk -lno PATH "$DEV" | sed -n 2p)
 line=$(sfdisk -d "$DEV" | grep "^$PART ")
 echo "$line"
-case "$line" in *"start=$START,"*"type=c"*) ;; *)
+# sfdisk pads the numbers ("start=        8192"), so squeeze the spaces first.
+squeezed=$(echo "$line" | tr -d ' ')
+case "$squeezed" in *"start=$START,"*"type=c"*) ;; *)
     echo "p1 is not 'start=$START, type=c', refusing"; exit 1 ;;
 esac
 fstype=$(lsblk -no FSTYPE "$PART")
@@ -63,6 +65,8 @@ read -r -p "Grow $PART from $(( cur_sectors / 2048 )) to $MIB MiB. Type the devi
 mkdir -p "$PROJECT_DIR/build"
 BACKUP="$PROJECT_DIR/build/sdcard-mbr-$name-$(date +%Y%m%d-%H%M%S).bin"
 dd if="$DEV" of="$BACKUP" bs=512 count=1 status=none
+# Under sudo the file is root's, and podman's :Z relabel of build/ fails on it.
+[ -z "${SUDO_UID:-}" ] || chown "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$BACKUP"
 echo "old partition table saved: $BACKUP (restore: dd if=$BACKUP of=$DEV bs=512 count=1)"
 
 # Only p1 changes (same start, bigger size). Then grow the filesystem to fill it.
